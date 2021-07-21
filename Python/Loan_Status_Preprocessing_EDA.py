@@ -36,8 +36,7 @@ from group_lasso import LogisticGroupLasso
 from pandas_profiling import ProfileReport
 import sweetviz as sv
 
-#path = r'D:\Loan-Status'
-path = r'D:\Documents-D\Becoming_a_DS_DE\Portfolio Design\PSU Classes\DAAN881-Data Driven Decision Making\Loan-Status\Data'
+path = r'D:\Loan-Status'
 os.chdir(path)
 
 # Read file
