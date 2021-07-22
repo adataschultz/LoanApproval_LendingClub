@@ -117,10 +117,14 @@ class(loan_status)
 
 ################################################################################
 # Dummy Variables using fastDummies
+df$term <- as.factor(df$term)
 df <- fastDummies::dummy_cols(df)
 
-df <- cbind(loan_status, df)
+# Remove original vars dummy vars were made from
+df <- within(df, rm(term, grade, emp_length, home_ownership, verification_status,
+                    purpose, hardship_flag, debt_settlement_flag))
 
+df <- cbind(loan_status, df)
 summary(df)
 
 ################################################################################
@@ -217,7 +221,7 @@ df <- within(df, rm(loan_status))
 ################################################################################
 # Partition for variable selection methods
 set.seed(123)
-data_sampling_vector <- createDataPartition(df$Loan_status, p=0.90, list = FALSE)
+data_sampling_vector <- createDataPartition(df$Loan_status, p=0.99, list = FALSE)
 
 data_train <- df[data_sampling_vector,]
 data_test <- df[-data_sampling_vector,]
@@ -242,7 +246,7 @@ dim(df.mvsis)
 df.mvsis$Loan_status <- as.integer(df.mvsis$Loan_status)
 
 # Set up for screening
-X <- df.mvsis[,2:120]
+X <- df.mvsis[,2:112]
 Y <- df.mvsis[,1]
 
 # Screen using MV-SIS

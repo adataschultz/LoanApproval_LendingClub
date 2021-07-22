@@ -36,7 +36,7 @@ from group_lasso import LogisticGroupLasso
 from pandas_profiling import ProfileReport
 import sweetviz as sv
 
-path = r'D:\Loan-Status'
+path = r'D:\Loan-Status\Data'
 os.chdir(path)
 
 # Read file
@@ -541,6 +541,7 @@ os.chdir(path)
 
 # Examine Quantitative vars
 df_num = df.select_dtypes(include = ['float64', 'int64'])
+df_num = df_num.drop(['loan_status'], axis=1)
 
 print('The selected dataframe has ' + str(df_num.shape[1]) +
        ' columns that are quantitative variables.')
@@ -595,16 +596,6 @@ fig, ax = plt.subplots(8, 5, figsize=(15, 10))
 for var, subplot in zip(df_num, ax.flatten()):
     sns.boxplot(x='loan_status', y=var, data=df, ax=subplot)
     fig.savefig('EDA_Quant_Boxplots.pdf', dpi=my_dpi * 10,
-            bbox_inches='tight')
-
-# Loan status pair plot
-my_dpi=96
-fig = plt.figure()
-plt.rcParams['figure.figsize'] = (21, 14)
-plt.rcParams.update({'font.size': 6})    
-sns.set_style('whitegrid')
-ax = sns.pairplot(df_num, hue='loan_status', height=3)
-fig.savefig('EDA_Pairplot.png', dpi=my_dpi * 10,
             bbox_inches='tight')
 
 ###############################################################################
