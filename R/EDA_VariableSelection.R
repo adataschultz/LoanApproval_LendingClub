@@ -221,7 +221,7 @@ df <- within(df, rm(loan_status))
 ################################################################################
 # Partition for variable selection methods
 set.seed(123)
-data_sampling_vector <- createDataPartition(df$Loan_status, p=0.99, list = FALSE)
+data_sampling_vector <- createDataPartition(df$Loan_status, p=0.90, list = FALSE)
 
 data_train <- df[data_sampling_vector,]
 data_test <- df[-data_sampling_vector,]

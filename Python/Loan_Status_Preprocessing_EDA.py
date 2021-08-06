@@ -9,19 +9,15 @@ import os
 import pandas as pd
 import numpy as np
 from numpy import sort
-from scipy import stats
 import matplotlib.pyplot as plt
 from matplotlib import pyplot
 import seaborn as sns
-from pprint import pprint
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OneHotEncoder
 from joblib import parallel_backend
 from joblib import Parallel, delayed
 from sklearn.feature_selection import SelectFromModel
-from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
-from sklearn import metrics
 from sklearn.metrics import accuracy_score
 from xgboost import XGBClassifier
 from xgboost import plot_importance
@@ -29,7 +25,6 @@ from sklearn.inspection import permutation_importance
 import shap
 import time
 from statsmodels.stats.outliers_influence import variance_inflation_factor 
-from group_lasso import GroupLasso
 from group_lasso.utils import extract_ohe_groups
 import scipy.sparse
 from group_lasso import LogisticGroupLasso
@@ -243,7 +238,6 @@ accuracy_df = pd.DataFrame(accuracy_dict.items(), columns=['n_features',
                                                            'Accuracy'])
 accuracy_df.to_csv('selectFromModel_Xgboost_nFeatures_Accuracy.csv',
                    index=False)
-df_sample.to_csv('LendingTree_LoanStatus_sample_7e4.csv', index=False)
 
 # Select features using optimal threshold with least number of features
 selection = SelectFromModel(model, threshold=thresh_goal, prefit=True)
@@ -477,48 +471,56 @@ X2 = df.drop('loan_status', axis=1)
 X2 = pd.get_dummies(X2, drop_first=True)
 
 # Use results from variable selection using MV-SIS completed in R
-X_mfs = X2[['funded_amnt_inv', 'installment', 'pymnt_plan_y', 
-          'delinq_2yrs', 'initial_list_status_w', 'out_prncp', 'out_prncp_inv',
-          'total_pymnt', 'total_pymnt_inv', 'total_rec_prncp', 'total_rec_int',
-          'total_rec_late_fee', 'recoveries', 'collection_recovery_fee', 
-          'tot_cur_bal', 'total_rev_hi_lim', 'avg_cur_bal', 'bc_open_to_buy',
-          'mo_sin_old_rev_tl_op', 'mo_sin_rcnt_rev_tl_op', 'mort_acc',
-          'num_tl_90g_dpd_24m', 'pct_tl_nvr_dlq', 'total_bal_ex_mort', 
-          'disbursement_method_DirectPay', 'debt_settlement_flag_Y',
-          'term_ 60 months','grade_C', 'grade_D', 
-          'home_ownership_RENT', 'verification_status_Source Verified']]
- 
+X_mfs = X2[['num_bc_tl', 'num_il_tl', 'num_op_rev_tl', 'pymnt_plan_y', 
+            'num_accts_ever_120_pd', 'mo_sin_old_rev_tl_op', 
+            'last_pymnt_amnt', 'percent_bc_gt_75', 'revol_util', 
+            'tot_hi_cred_lim', 'num_actv_rev_tl', 'disbursement_method_DirectPay',
+            'tot_coll_amt', 'term_ 60 months', 'mort_acc', 'funded_amnt_inv',
+            'int_rate', 'inq_last_6mths',  'delinq_2yrs', 'installment',
+            'collections_12_mths_ex_med',  'open_acc', 'loan_amnt',
+            'funded_amnt', 'annual_inc',  'num_tl_op_past_12m',
+            'home_ownership_OTHER',  'total_bc_limit']]
+
 X_mfs = X_mfs.drop_duplicates()
 print('\nDimensions of Data using Variables selected from MVSIS:', X_mfs.shape) 
 print('======================================================================')
-
-del X2
 
 ###############################################################################
 # Find differences in variables from different variable selection methods
 # Difference between important features using xgboost=all vs after vif
 s = set(X_xgb_all)
 varDiff_xgb = [x for x in X_xgb_vif if x not in s]
-print('\nFeatures in xgb using all features but not Xgb - VIF:', varDiff_xgb) 
+print('\nFeatures in xgb using VIF but not in Xgb - all:', varDiff_xgb) 
 print('\nNumber of different features: ' + str(len(varDiff_xgb)))
 
 s1 = set(X_xgb_vif)
 varDiff_xgbVIF = [x for x in X_xgb_all if x not in s1]
-print('\nFeatures in xgb_VIF but not Xgb_all: ', varDiff_xgbVIF) 
+print('\nFeatures in xgb_all but not Xgb_VIF: ', varDiff_xgbVIF) 
 print('Number of different features: ' + str(len(varDiff_xgbVIF)))
 
-varDiff_mvsis = [x for x in X_mfs if x not in s]
-print('\nFeatures in xgb_all but not MV-SIS: ', varDiff_mvsis) 
-print('Number of different features: ' + str(len(varDiff_mvsis)))
+varDiff_mvsisAll = [x for x in X_mfs if x not in s]
+print('\nFeatures in MVSIS but not in xgb_all: ', varDiff_mvsisAll) 
+print('Number of different features: ' + str(len(varDiff_mvsisAll)))
 
-varDiff_mvsisVIF = [x for x in X_mfs if x not in s1]
-print('\nFeatures in xgb_VIF but not MV-SIS: ', varDiff_mvsisVIF) 
+varDiff_mvsisVIF = [x for x in X_mfs if x not in s]
+print('\nFeatures in MVSIS but not in xgb_VIF: ', varDiff_mvsisVIF) 
 print('Number of different features: ' + str(len(varDiff_mvsisVIF)))
+
+s1 = set(X_mfs)
+varDiff_mvsisAll1 = [x for x in X_xgb_all if x not in s1]
+print('\nFeatures in xgb_all but not in MV-SIS: ', varDiff_mvsisAll1) 
+print('Number of different features: ' + str(len(varDiff_mvsisAll1)))
+
+varDiff_mvsisVIF1 = [x for x in X_xgb_vif if x not in s1]
+print('\nFeatures in xgb_VIF but not MV-SIS: ', varDiff_mvsisVIF1) 
+print('Number of different features: ' + str(len(varDiff_mvsisVIF1)))
 print('======================================================================')
 
-# Add variables found in both MVSIS and xgb_VIF to set for EDA
-df_tmp = X2[['collection_recovery_fee', 'total_rev_hi_lim', 'avg_cur_bal',
-             'mo_sin_old_rev_tl_op', 'mo_sin_rcnt_rev_tl_op', 'mort_acc']]
+# Add variables found in both MVSIS and xgb_VIF and only MVSIS to set for EDA
+df_tmp = X2[['num_il_tl', 'num_op_rev_tl', 'num_accts_ever_120_pd',
+             'mo_sin_old_rev_tl_op', 'percent_bc_gt_75', 'revol_util',
+             'num_actv_rev_tl', 'tot_coll_amt', 'mort_acc', 'delinq_2yrs',
+             'open_acc', 'num_tl_op_past_12m', 'home_ownership_OTHER']]
 
 df_X = pd.concat([X_xgb_all, df_tmp], axis=1)
 df = pd.concat([df_X, y], axis=1)
@@ -618,7 +620,7 @@ fig.savefig('QualVar_Countplot.png', dpi=my_dpi * 10, bbox_inches='tight')
 ###############################################################################
 # Automated EDA with Sweetviz after cleaning
 sweet_report = sv.analyze(df)
-sweet_report.show_html('LoanStatus__AutomatedEDA.html')
+sweet_report.show_html('LoanStatus_AutomatedEDA.html')
 
 ###############################################################################
 # Automated EDA using Pandas Profiling after cleaning
