@@ -28,6 +28,7 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 from group_lasso.utils import extract_ohe_groups
 import scipy.sparse
 from group_lasso import LogisticGroupLasso
+import matplotlib.backends.backend_pdf
 from pandas_profiling import ProfileReport
 import sweetviz as sv
 
@@ -46,7 +47,11 @@ df_sample = df.sample(n=70000)
 df_sample.to_csv('LendingTree_LoanStatus_sample_7e4.csv', index=False)
 
 del df_sample
+
 ###############################################################################
+# Change path to EDA
+path = r'D:\Loan-Status\Python\EDA'
+os.chdir(path)
 
 # Replace empty with NA
 df = df.replace(r'^\s*$', np.nan, regex=True)
@@ -88,7 +93,7 @@ print('======================================================================')
 
 del df1
 
-#Drop based on missing and research questions
+# Drop based on missing and research questions
 df = df.drop(['title', 'earliest_cr_line', 'last_pymnt_d',
               'last_credit_pull_d'], axis=1)
 
@@ -111,7 +116,7 @@ print('\nData Quality Report - Initial')
 print(data_quality_table(df))
 print('======================================================================')
 
-#Drop based on missing and business questions (continued)
+# Drop based on missing and business questions (continued)
 df = df.drop(['zip_code', 'sub_grade', 'issue_d', 'addr_state', 'policy_code'],
              axis=1)
 
@@ -205,15 +210,15 @@ thresholds = sort(model.feature_importances_)
 thresh_goal = thresholds[0]
 accuracy_list = []
 for thresh in thresholds:
-    # select features using threshold:
+    # Select features using threshold:
     selection = SelectFromModel(model, threshold=thresh, prefit=True)
     select_X = selection.transform(X)
-    # train model:
+    # Train model:
     selection_model = XGBClassifier(eval_metric='logloss',
                                     use_label_encoder=False)
     with parallel_backend('threading', n_jobs=-1):
         selection_model.fit(select_X, y)
-    # eval model:
+    # Eval model:
     selection_model_pred = selection_model.predict(select_X)
     selection_predictions = [round(value) for value in selection_model_pred]
     accuracy = accuracy_score(y_true=y, y_pred=selection_predictions)
@@ -258,7 +263,7 @@ model = XGBClassifier(eval_metric='logloss', use_label_encoder=False)
 with parallel_backend('threading', n_jobs=-1):
     model.fit(X, y)
 
-# make predictions for test data and evaluate
+# Make predictions for test data and evaluate
 y_pred = model.predict(X)
 predictions = [round(value) for value in y_pred]
 accuracy = accuracy_score(y, predictions)
@@ -316,7 +321,6 @@ def calculate_vif_(X, threshold=5.0):
     dropped=True
     while dropped:
         dropped=False
-        #print(len(features))
         print('\nThe starting number of quantitative features is: ' + str(len(features)))
         vif = Parallel(n_jobs=-1,
                        verbose=5)(delayed(variance_inflation_factor)(X[features].values,
@@ -326,7 +330,6 @@ def calculate_vif_(X, threshold=5.0):
             print(time.ctime() + ' dropping \'' + X[features].columns[maxloc] + '\' at index: ' + str(maxloc))
             features.pop(maxloc)
             dropped=True
-
     print('Features Remaining:')
     print([features])
     return X[[i for i in features]]
@@ -438,7 +441,7 @@ print(f'Number of total variables: {len(sparsity_mask)}')
 print(f'Number of chosen variables: {sparsity_mask.sum()}')
 print(f'Accuracy: {accuracy}')
 
-# COnvert variable position to series and list to match with location in df
+# Convert variable position to series and list to match with location in df
 tdf = pd.Series(list(gl.chosen_groups_)).T
 tdf = tdf.values.tolist()
 
@@ -527,10 +530,14 @@ df = pd.concat([df_X, y], axis=1)
 print('\nDimensions of data using for further EDA:', df.shape) 
 print('======================================================================')
 
-del X, X2, s, s1, varDiff_xgb, varDiff_xgbVIF, varDiff_mvsis, varDiff_mvsisVIF
-del df_tmp
+del X, X2, s, s1, varDiff_xgb, varDiff_xgbVIF, varDiff_mvsisAll, varDiff_mvsisVIF
+del X_mfs, varDiff_mvsisAll1, varDiff_mvsisVIF1, df_tmp
 
 ###############################################################################
+# Set path for dats
+path = r'D:\Loan-Status\Data'
+os.chdir(path)
+
 # Write to csv for EDA in Spark
 df.to_csv('LendingTree_LoanStatus_EDA.csv', index=False)
 
@@ -587,40 +594,44 @@ fig.savefig('EDA_correlationMatrix_spearman.png', dpi=my_dpi * 10,
 
 ###############################################################################
 # Overlaid histograms of quant vars for Loan_status
-fig, ax = plt.subplots(8, 5, figsize=(15, 10))
-for var, subplot in zip(df_num, ax.flatten()):
-    sns.histplot(x=var, data=df_num, hue='loan_status', kde=True, ax=subplot)
-fig.savefig('EDA_Quant_Histograms.pdf', dpi=my_dpi * 10,
-            bbox_inches='tight')
+pdf = matplotlib.backends.backend_pdf.PdfPages("EDA_Quant_Histograms_output.pdf")
+for var in df_num.columns[:]:
+  fig = plt.figure(figsize=(8.27, 11.69), dpi=my_dpi * 10)
+  sns.histplot(x=var, data=df_num, hue=df.loan_status, kde=True)
+  sns.despine(offset=10, trim=True) 
+  fig.set_size_inches(22,14)
+  pdf.savefig(fig)
+pdf.close()
 
 # Box-and-whisker plots of quant vars for Loan_status
-fig, ax = plt.subplots(8, 5, figsize=(15, 10))
-for var, subplot in zip(df_num, ax.flatten()):
-    sns.boxplot(x='loan_status', y=var, data=df, ax=subplot)
-    fig.savefig('EDA_Quant_Boxplots.pdf', dpi=my_dpi * 10,
-            bbox_inches='tight')
+pdf = matplotlib.backends.backend_pdf.PdfPages("EDA_Quant_Boxplots_output.pdf")
+for var in df_num.columns[:]:
+  fig = plt.figure(figsize=(8.27, 11.69), dpi=my_dpi * 10)
+  sns.boxplot(x=df.loan_status, y=var, data=df_num)
+  fig.set_size_inches(22,14)
+  pdf.savefig(fig)
+pdf.close()
 
 ###############################################################################
 ###############################################################################    
 # Examine Qualitative vars
-df_cat = df.select_dtypes(include = 'object')
+df_cat = df.select_dtypes(include = 'uint8')
 
 print('The selected dataframe has ' + str(df_cat.shape[1]) +
        ' columns that are qualitative variables.')
 print('======================================================================')
 
 # Count plot
-fig, ax = plt.subplots(2, 4, figsize=(20, 10))
+fig, ax = plt.subplots(5, 4, figsize=(11.7, 8.27))
 for variable, subplot in zip(df_cat, ax.flatten()):
     sns.countplot(df_cat[variable], ax=subplot)
-    for label in subplot.get_xticklabels():
-        label.set_rotation(90)
+plt.tight_layout()  
 fig.savefig('QualVar_Countplot.png', dpi=my_dpi * 10, bbox_inches='tight')
 
 ###############################################################################
 # Automated EDA with Sweetviz after cleaning
 sweet_report = sv.analyze(df)
-sweet_report.show_html('LoanStatus_AutomatedEDA.html')
+sweet_report.show_html('Loan_Status_AutomatedEDA.html')
 
 ###############################################################################
 # Automated EDA using Pandas Profiling after cleaning
