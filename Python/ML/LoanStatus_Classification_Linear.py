@@ -32,7 +32,11 @@ import eli5 as eli
 from eli5.sklearn import PermutationImportance 
 from eli5 import show_weights
 import webbrowser
+from eli5.sklearn import explain_weights_sklearn
+from eli5.formatters import format_as_dataframe, format_as_dataframes
 from eli5 import show_prediction
+import lime
+from lime import lime_tabular
 
 pd.set_option('display.max_columns', None)
 
@@ -271,16 +275,13 @@ url = r'D:\Loan-Status\Python\ML_Results\Linear\LassoMod_US_HPO_WeightsFeatures.
 webbrowser.open(url, new=2)
 
 # Explain weights
-html_obj1 = eli.explain_weights(LassoMod_US_HPO)
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X_test.columns.tolist())
+exp = format_as_dataframe(explanation)
 
-# Write explain weights html object to a file 
-with open('D:\Loan-Status\Python\ML_Results\Linear\LassoMod_US_HPO_WeightsExplain.htm',
-          'wb') as f:
-    f.write(html_obj1.data.encode("UTF-8"))
-
-# Open the stored explain weights HTML file
-url1 = r'D:\Loan-Status\Python\ML_Results\Linear\LassoMod_US_HPO_WeightsExplain.htm'
-webbrowser.open(url1, new=2)
+# Write processed data to csv
+exp.to_csv('loanStatus_Linear_LassoMod_US_HPO_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
 
 # Show prediction
 html_obj2 = show_prediction(LassoMod_US_HPO, X_test.iloc[1],
@@ -298,6 +299,20 @@ webbrowser.open(url2, new=2)
 # Explain prediction
 #explanation_pred = eli.explain_prediction(LassoMod_US_HPO, np.array(X_test)[1])
 #explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_train),
+    feature_names=X_train.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X_test.iloc[1], 
+    predict_fn=LassoMod_US_HPO.predict_proba)
+
+exp.save_to_file('LassoMod_US_HPO_LIME.html')
 
 ###############################################################################
 # Fit best model using gridsearch results on Upsamplimg to SMOTE data
@@ -335,7 +350,7 @@ print('F1 score : %.3f'%f1_score(y1_test, y_pred_US_HPO))
 
 ###############################################################################
 # Model metrics with Eli5
-# Compute permutation feature importance
+# Compute permutation feature importance (if loaded from saved pickle)
 perm_importance = PermutationImportance(model,
                                         random_state=seed_value).fit(X1_test,
                                                                      y1_test)
@@ -354,16 +369,13 @@ url = r'D:\Loan-Status\Python\ML_Results\Linear\LassoMod_US_HPO_SMOTE_WeightsFea
 webbrowser.open(url, new=2)
 
 # Explain weights
-html_obj1 = eli.explain_weights(LassoMod_US_HPO)
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X1_test.columns.tolist())
+exp = format_as_dataframe(explanation)
 
-# Write explain weights html object to a file 
-with open('D:\Loan-Status\Python\ML_Results\Linear\LassoMod_US_HPO_SMOTE_WeightsExplain.htm',
-          'wb') as f:
-    f.write(html_obj1.data.encode("UTF-8"))
-
-# Open the stored Explain weights HTML file
-url1 = r'D:\Loan-Status\Python\ML_Results\Linear\LassoMod_US_HPO__SMOTEWeightsExplain.htm'
-webbrowser.open(url1, new=2)
+# Write processed data to csv
+exp.to_csv('loanStatus_Linear_LassoMod_US_HPO_SMOTE_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
 
 # Show prediction
 html_obj2 = show_prediction(LassoMod_US_HPO, X_test.iloc[1],
@@ -381,6 +393,20 @@ webbrowser.open(url2, new=2)
 # Explain prediction
 #explanation_pred = eli.explain_prediction(model, np.array(X_test)[1])
 #explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X1_train),
+    feature_names=X1_train.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X1_test.iloc[1], 
+    predict_fn=model.predict_proba)
+
+exp.save_to_file('LassoMod_US_HPO_LIME_SMOTE.html')
 
 ###############################################################################
 ##################### SMOTE - Grid Search using Pipelines   ###################
