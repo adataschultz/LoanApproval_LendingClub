@@ -435,5 +435,198 @@ print('Classification with highest accuracy: %s' % pipe_dict[best_clf])
 # Find best parameters from GridsearchCV in Upsampled data 
 print('Lasso/Elastic Net using SMOTE - Best Estimator')
 print(best_pipe.best_params_)
-# TBD
+
+###############################################################################
+# Fit model with best accuracy
+LassoMod_SMOTE = LogisticRegression(penalty='l1', C=10, solver= 'saga',
+                                                   max_iter=10000, n_jobs=-1, 
+                                                   random_state=seed_value)
+
+# Fit the grid search to the data
+with parallel_backend('threading', n_jobs=-1):
+    LassoMod_SMOTE.fit(X1_train, y1_train)
+
+# Save model
+Pkl_Filename = 'LoanStatus_Lasso_SMOTEHPO_gridSearch.pkl'  
+
+with open(Pkl_Filename, 'wb') as file:  
+    pickle.dump(LassoMod_SMOTE, file)
+
+# =============================================================================
+# # To load saved model
+# LassoMod_SMOTE = joblib.load('LoanStatus_Lasso_UpsamplingHPO_gridSearch.pkl')
+# print(LassoMod_SMOTE)
+# =============================================================================
+
+# Predict based on training 
+y_pred_SMOTE_HPO = LassoMod_SMOTE.predict(X1_test)
+
+print('Results from LASSO using SMOTE HPO:')
+print('\n')
+print('Classification Report:')
+clf_rpt = classification_report(y1_test,y_pred_SMOTE_HPO)
+print(clf_rpt)
+print('\n')
+print('Confusion matrix:')
+print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
+print('\n')
+print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f'%recall_score(y1_test, y_pred_SMOTE_HPO))
+print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
+
+###############################################################################
+# Model metrics with Eli5
+# Compute permutation feature importance
+perm_importance = PermutationImportance(LassoMod_SMOTE,
+                                        random_state=seed_value).fit(X1_test,
+                                                                     y1_test)
+
+# Store feature weights in an object
+html_obj = eli.show_weights(perm_importance,
+                            feature_names = X1_test.columns.tolist())
+
+# Write feature weights html object to a file 
+with open('D:\Loan-Status\Python\ML_Results\Linear\LassoMod_SMOTE_HPO_WeightsFeatures.htm',
+          'wb') as f:
+    f.write(html_obj.data.encode("UTF-8"))
+
+# Open the stored feature weights HTML file
+url = r'D:\Loan-Status\Python\ML_Results\Linear\LassoMod_SMOTE_HPO_WeightsFeatures.htm'
+webbrowser.open(url, new=2)
+
+# Explain weights
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X1_test.columns.tolist())
+exp = format_as_dataframe(explanation)
+
+# Write processed data to csv
+exp.to_csv('loanStatus_Linear_LassoMod_SMOTE_HPO_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
+
+# Show prediction
+html_obj2 = show_prediction(LassoMod_SMOTE, X1_test.iloc[1],
+                            show_feature_values=True)
+
+# Write show prediction html object to a file 
+with open('D:\Loan-Status\Python\ML_Results\Linear\LassoMod_SMOTE_HPO_Prediction.htm',
+          'wb') as f:
+    f.write(html_obj2.data.encode("UTF-8"))
+
+# Open the show prediction stored HTML file
+url2 = r'D:\Loan-Status\Python\ML_Results\Linear\LassoMod_SMOTE_HPO_Prediction.htm'
+webbrowser.open(url2, new=2)
+
+# Explain prediction
+#explanation_pred = eli.explain_prediction(LassoMod_SMOTE, np.array(X_test)[1])
+#explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X1_train),
+    feature_names=X1_train.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X1_test.iloc[1], 
+    predict_fn=LassoMod_SMOTE.predict_proba)
+
+exp.save_to_file('LassoMod_SMOTE_HPO_LIME.html')
+
+###############################################################################
+# Fit best model using gridsearch results on Upsamplimg to SMOTE data
+with parallel_backend('threading', n_jobs=-1):
+    LassoMod_SMOTE.fit(X_train, y_train)
+
+# Save model
+Pkl_Filename = 'LoanStatus_Lasso_UpsamplingusingSMOTEHPO_gridSearch.pkl' 
+
+with open(Pkl_Filename, 'wb') as file:  
+    pickle.dump(LassoMod_SMOTE, file)
+
+# =============================================================================
+# # To load saved model
+# model = joblib.load('LoanStatus_Lasso_UpsamplingusingSMOTEHPO_gridSearch.pkl')
+# print(model)
+# =============================================================================
+
+# Predict based on training 
+y_pred_SMOTE_HPO = LassoMod_SMOTE.predict(X_test)
+
+print('Results from LASSO using SMOTE HPO on Upsampling Data:')
+print('\n')
+print('Classification Report:')
+clf_rpt = classification_report(y_test, y_pred_SMOTE_HPO)
+print(clf_rpt)
+print('\n')
+print('Confusion matrix:')
+print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
+print('\n')
+print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f'%precision_score(y_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f'%recall_score(y_test, y_pred_SMOTE_HPO))
+print('F1 score : %.3f'%f1_score(y_test, y_pred_SMOTE_HPO))
+
+###############################################################################
+# Model metrics with Eli5
+# Compute permutation feature importance (if loaded from saved pickle)
+perm_importance = PermutationImportance(model,
+                                        random_state=seed_value).fit(X_test,
+                                                                     y_test)
+
+# Store feature weights in an object
+html_obj = eli.show_weights(perm_importance,
+                            feature_names = X_test.columns.tolist())
+
+# Write feature weights html object to a file 
+with open('D:\Loan-Status\Python\ML_Results\Linear\LassoMod_SMOTE_HPO_Upsampling_WeightsFeatures.htm',
+          'wb') as f:
+    f.write(html_obj.data.encode("UTF-8"))
+
+# Open the stored feature weights HTML file
+url = r'D:\Loan-Status\Python\ML_Results\Linear\LassoMod_SMOTE_HPOE_Upsampling_WeightsFeatures.htm'
+webbrowser.open(url, new=2)
+
+# Explain weights
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X_test.columns.tolist())
+exp = format_as_dataframe(explanation)
+
+# Write processed data to csv
+exp.to_csv('loanStatus_Linear_LassoMod_SMOTE_HPO_Upsampling_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
+
+# Show prediction
+html_obj2 = show_prediction(LassoMod_SMOTE, X_test.iloc[1],
+                            show_feature_values=True)
+
+# Write show prediction html object to a file 
+with open('D:\Loan-Status\Python\ML_Results\Linear\LassoMod_SMOTE_HPO_Upsampling_Prediction.htm',
+          'wb') as f:
+    f.write(html_obj2.data.encode("UTF-8"))
+
+# Open the stored show prediction HTML file
+url2 = r'D:\Loan-Status\Python\ML_Results\Linear\LassoMod_SMOTE_HPO_Upsampling_Prediction.htm'
+webbrowser.open(url2, new=2)
+
+# Explain prediction
+#explanation_pred = eli.explain_prediction(model, np.array(X_test)[1])
+#explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_train),
+    feature_names=X_train.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X_test.iloc[1], 
+    predict_fn=model.predict_proba)
+
+exp.save_to_file('LassoMod_SMOTE_HPO_Upsampling_LIME_SMOTE.html')
+
 ###############################################################################
