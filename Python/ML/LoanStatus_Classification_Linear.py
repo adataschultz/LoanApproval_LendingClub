@@ -21,6 +21,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.linear_model import ElasticNet
+import time
 import pickle
 from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
@@ -184,15 +185,20 @@ param_grids_list = make_param_grids(pipeline_steps, all_param_grids)
 pipe = Pipeline(steps=[('classifier', ElasticNet())])  
 
 # Deine gridSearchCV 
-grid = GridSearchCV(pipe, param_grid = param_grids_list, n_jobs=-1)
+grid = GridSearchCV(pipe, param_grid = param_grids_list, cv = 3, n_jobs=-1)
 
 ###############################################################################
 ################## Upsampling - Grid Search using Pipelines   #################
 ###############################################################################
 # Fit data using Dask.delayed
+print('Start Upsampling - Grid Search..')
+search_time_start = time.time()
 pipelines_ = [dask.delayed(grid).fit(X_train, y_train)]
 fit_pipelines = dask.compute(*pipelines_, scheduler='processes',
                              num_workers=50)
+
+print('Finished Upsampling - Grid Search :', time.time() - search_time_start)
+print('======================================================================')
 
 # Compare accuracy to find model with highest accuracy
 for idx, val in enumerate(fit_pipelines):
@@ -221,9 +227,13 @@ LassoMod_US_HPO = LogisticRegression(penalty='l1', C=10, solver= 'saga',
                                                    max_iter=10000, n_jobs=-1, 
                                                    random_state=seed_value)
 
-# Fit the grid search to the data
+print('Start fit the best hyperparameters from Upsampling grid search to the data..')
+search_time_start = time.time()
 with parallel_backend('threading', n_jobs=-1):
     LassoMod_US_HPO.fit(X_train, y_train)
+print('Finished fit the best hyperparameters from Upsampling grid search to the data :',
+      time.time() - search_time_start)
+print('======================================================================')
 
 # Save model
 Pkl_Filename = 'LoanStatus_Lasso_UpsamplingHPO_gridSearch.pkl'  
@@ -315,9 +325,13 @@ exp = explainer.explain_instance(
 exp.save_to_file('LassoMod_US_HPO_LIME.html')
 
 ###############################################################################
-# Fit best model using gridsearch results on Upsamplimg to SMOTE data
+print('Start Fit best model using gridsearch results on Upsamplimg to SMOTE data..')
+search_time_start = time.time()
 with parallel_backend('threading', n_jobs=-1):
     LassoMod_US_HPO.fit(X1_train, y1_train)
+print('Finished Fit best model using gridsearch results on Upsamplimg to SMOTE data :',
+      time.time() - search_time_start)
+print('======================================================================')
 
 # Save model
 Pkl_Filename = 'LoanStatus_Lasso_SMOTEusingUpsamplingHPO_gridSearch.pkl' 
@@ -412,9 +426,13 @@ exp.save_to_file('LassoMod_US_HPO_LIME_SMOTE.html')
 ##################### SMOTE - Grid Search using Pipelines   ###################
 ###############################################################################
 # Fit data using Dask.delayed
+print('Start SMOTE - Grid Search..')
+search_time_start = time.time()
 pipelines1_ = [dask.delayed(grid).fit(X1_train, y1_train)]
 fit_pipelines1 = dask.compute(*pipelines1_, scheduler='processes',
                              num_workers=50)
+print('Finished SMOTE - Grid Search :', time.time() - search_time_start)
+print('======================================================================')
 
 # Compare accuracy to find model with highest accuracy
 for idx, val in enumerate(fit_pipelines1):
@@ -442,9 +460,13 @@ LassoMod_SMOTE = LogisticRegression(penalty='l1', C=10, solver= 'saga',
                                                    max_iter=10000, n_jobs=-1, 
                                                    random_state=seed_value)
 
-# Fit the grid search to the data
+print('Start fit the best hyperparameters from SMOTE grid search to the data..')
+search_time_start = time.time()
 with parallel_backend('threading', n_jobs=-1):
     LassoMod_SMOTE.fit(X1_train, y1_train)
+print('Finished fit the best hyperparameters from SMOTE grid search to the data :',
+      time.time() - search_time_start)
+print('======================================================================')
 
 # Save model
 Pkl_Filename = 'LoanStatus_Lasso_SMOTEHPO_gridSearch.pkl'  
@@ -536,9 +558,13 @@ exp = explainer.explain_instance(
 exp.save_to_file('LassoMod_SMOTE_HPO_LIME.html')
 
 ###############################################################################
-# Fit best model using gridsearch results on Upsamplimg to SMOTE data
+print('Start fit best model using gridsearch results on SMOTE to Upsamplimg data..')
+search_time_start = time.time()
 with parallel_backend('threading', n_jobs=-1):
     LassoMod_SMOTE.fit(X_train, y_train)
+print('Finished fit best model using gridsearch results on SMOTE to Upsamplimg data :',
+      time.time() - search_time_start)
+print('======================================================================')
 
 # Save model
 Pkl_Filename = 'LoanStatus_Lasso_UpsamplingusingSMOTEHPO_gridSearch.pkl' 
