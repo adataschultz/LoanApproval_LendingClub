@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
 from imblearn.over_sampling import SMOTE
 from sklearn.preprocessing import StandardScaler
+import joblib
 from joblib import parallel_backend
 from sklearn.model_selection import cross_val_score
 from hyperopt import STATUS_OK
@@ -123,11 +124,12 @@ X1_train = sc.fit_transform(X1_train)
 X1_test = sc.transform(X1_test)
 
 # Change path to Results from Machine Learning
-path = r'D:\Loan-Status\Python\ML_Results'
+path = r'D:\Loan-Status\Python\ML_Results\Nonlinear\lightGBM'
 os.chdir(path)
 
 ###############################################################################
 ######################## light GBM HPO for Upsampling Set #####################
+################################## 100 Trials #################################
 ###############################################################################
 # Create a lgb dataset
 params = {'verbose': -1}
@@ -205,7 +207,7 @@ param_grid = {
 tpe_algorithm = tpe.suggest
 
 # File to save results
-out_file = 'lightGBM_HPO_Upsampling.csv'
+out_file = 'lightGBM_HPO_Upsampling_100.csv'
 of_connection = open(out_file, 'w')
 writer = csv.writer(of_connection)
 
@@ -220,21 +222,20 @@ bayesOpt_Upsampling_trials = Trials()
 
 best_param = fmin(objective, param_grid, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_Upsampling_trials,
-                  rstate=seed_value)
+                  rstate=np.random.RandomState(42))
 
 # Sort the trials with lowest loss (highest AUC) 
 bayesOpt_Upsampling_trials_results = sorted(bayesOpt_Upsampling_trials.results,
                                             key = lambda x: x['loss'])
-print('Upsampling HPO: Top two trials with the lowest loss (highest AUC)')
+print('Upsampling HPO 100 trials: Top two trials with the lowest loss (highest AUC)')
 print(bayesOpt_Upsampling_trials_results[:2])
 
 # Read results from csv
-results = pd.read_csv('lightGBM_HPO_Upsampling.csv')
+results = pd.read_csv('lightGBM_HPO_Upsampling_100.csv')
 
 # Sort best scores
 results.sort_values('loss', ascending = True, inplace = True)
 results.reset_index(inplace = True, drop = True)
-results.head()
 
 # Convert from a string to a dictionary for later use
 ast.literal_eval(results.loc[0, 'params'])
@@ -253,15 +254,21 @@ best_bayes_Upsampling_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimat
 best_bayes_Upsampling_model.fit(X_train, y_train)
 
 # Save model
-Pkl_Filename = 'LoanStatus_lightGBM_Upsampling_BayesHyperopt.pkl' 
+Pkl_Filename = 'LoanStatus_lightGBM_Upsampling_BayesHyperopt_100.pkl' 
 
 with open(Pkl_Filename, 'wb') as file:  
     pickle.dump(best_bayes_Upsampling_model, file)
 
+# =============================================================================
+# # To load saved model
+# model = joblib.load('LoanStatus_lightGBM_Upsampling_BayesHyperopt_100.pkl')
+# print(model)
+# =============================================================================
+
 # Predict based on training 
 y_pred_Upsampling_HPO = best_bayes_Upsampling_model.predict(X_test)
 
-print('Results from lightGBM HPO on Upsampling Data:')
+print('Results from lightGBM HPO 100 trials on Upsampling Data:')
 print('\n')
 print('Classification Report:')
 clf_rpt = classification_report(y_test, y_pred_Upsampling_HPO)
@@ -278,12 +285,20 @@ print('F1 score : %.3f'%f1_score(y_test, y_pred_Upsampling_HPO))
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_Upsampling_model.predict_proba(X_test)[:, 1]
 
-print('The best model from Upsampling Bayes optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, preds)))
+print('The best model from Upsampling Bayes 100 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
 bayes_params = pd.DataFrame(columns = list(ast.literal_eval(results.loc[0, 'params']).keys()),
                             index = list(range(len(results))))
+
+# Convert data types for graphing
+bayes_params['colsample_bytree'] = bayes_params['colsample_bytree'].astype('float64')
+bayes_params['learning_rate'] = bayes_params['learning_rate'].astype('float64')
+bayes_params['num_leaves'] = bayes_params['num_leaves'].astype('float64')
+bayes_params['reg_alpha'] = bayes_params['reg_alpha'].astype('float64')
+bayes_params['reg_lambda'] = bayes_params['reg_lambda'].astype('float64')
+bayes_params['subsample'] = bayes_params['subsample'].astype('float64')
 
 # Add the results with each parameter a different column
 for i, params in enumerate(results['params']):
@@ -293,25 +308,77 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Save parameters to df
-bayes_params.to_csv('bayes_params_HPO_Upsampling.csv', index = False)
+bayes_params.to_csv('bayes_params_HPO_Upsampling_100.csv', index = False)
 
 # Visualize results from different boosting methods
 bayes_params['boosting_type'].value_counts().plot.bar(figsize = (10, 5),
                                                       color = 'blue',
                                                       title = 'Bayes Optimization Boosting Type')
 
-print('Upsampling Bayes Optimization boosting type percentages')
+print('Upsampling Bayes Optimization 100 trials boosting type percentages')
 100 * bayes_params['boosting_type'].value_counts() / len(bayes_params)
+
+# Density plots of the learning rate distributions 
+plt.figure(figsize = (20, 8))
+plt.rcParams['font.size'] = 18
+sns.kdeplot(bayes_params['learning_rate'], label = 'Bayes Optimization', linewidth = 2)
+plt.legend(loc = 1)
+plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
+plt.show()
+
+# Create plots of Hyperparameters that are numeric
+for i, hpo in enumerate(bayes_params.columns):
+    if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise',
+                     'max_depth', 'min_sum_hessian_in_leaf']:
+        plt.figure(figsize = (14, 6))
+        # Plot the random search distribution and the bayes search distribution
+        if hpo != 'loss':
+            sns.kdeplot(bayes_params[hpo], label = 'Bayes Optimization')
+            plt.legend(loc = 0)
+            plt.title('{} Distribution'.format(hpo))
+            plt.xlabel('{}'.format(hpo)); plt.ylabel('Density')
+            plt.tight_layout()
+            plt.show()
+
+# Map boosting type to integer (essentially label encoding)
+bayes_params['boosting_int'] = bayes_params['boosting_type'].replace({'goss': 0, 'dart': 1, 'gbdt': 2})
+
+# Plot the boosting type over the search
+plt.plot(bayes_params['iteration'], bayes_params['boosting_int'], 'ro')
+plt.yticks([0, 1, 2], ['goss', 'dart', 'gbdt']);
+plt.xlabel('Iteration'); plt.title('Boosting Type over trials')
+plt.show()
+
+# Plot quantitative hyperparameters
+fig, axs = plt.subplots(1, 4, figsize = (20, 5))
+i = 0
+for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 'num_leaves']):
+    
+        # Scatterplot
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+# Scatterplot of regularization hyperparameters
+fig, axs = plt.subplots(1, 2, figsize = (14, 6))
+i = 0
+for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
 
 ###############################################################################
 ######################### light GBM HPO for SMOTE Set #########################
+################################## 100 Trials #################################
 ###############################################################################
 # Create a lgb dataset
 params = {'verbose': -1}
 train_set = lgb.Dataset(X1_train, label = y1_train, params=params)
 
 # File to save results
-out_file = 'lightGBM_HPO_SMOTE.csv'
+out_file = 'lightGBM_HPO_SMOTE_100.csv'
 of_connection = open(out_file, 'w')
 writer = csv.writer(of_connection)
 
@@ -326,21 +393,20 @@ bayesOpt_SMOTE_trials = Trials()
 
 best_param = fmin(objective, param_grid, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
-                  rstate=seed_value)
+                  rstate=np.random.RandomState(42))
 
 # Sort the trials with lowest loss (highest AUC) 
 bayesOpt_SMOTE_trials_results = sorted(bayesOpt_SMOTE_trials.results,
                                        key = lambda x: x['loss'])
-print('SMOTE HPO: Top two trials with the lowest loss (highest AUC)')
+print('SMOTE HPO 100 trials: Top two trials with the lowest loss (highest AUC)')
 print(bayesOpt_SMOTE_trials_results[:2])
 
 # Read results from csv
-results = pd.read_csv('lightGBM_HPO_SMOTE.csv')
+results = pd.read_csv('lightGBM_HPO_SMOTE_100.csv')
 
 # Sort best scores
 results.sort_values('loss', ascending = True, inplace = True)
 results.reset_index(inplace = True, drop = True)
-results.head()
 
 # Convert from a string to a dictionary for later use
 ast.literal_eval(results.loc[0, 'params'])
@@ -359,7 +425,7 @@ best_bayes_SMOTE_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators,
 best_bayes_SMOTE_model.fit(X1_train, y1_train)
 
 # Save model
-Pkl_Filename = 'LoanStatus_lightGBM_SMOTE_BayesHyperopt.pkl' 
+Pkl_Filename = 'LoanStatus_lightGBM_SMOTE_BayesHyperopt_100.pkl' 
 
 with open(Pkl_Filename, 'wb') as file:  
     pickle.dump(best_bayes_SMOTE_model, file)
@@ -367,7 +433,7 @@ with open(Pkl_Filename, 'wb') as file:
 # Predict based on training 
 y_pred_SMOTE_HPO = best_bayes_SMOTE_model.predict(X1_test)
 
-print('Results from lightGBM HPO on SMOTE Data:')
+print('Results from lightGBM HPO 100 trials on SMOTE Data:')
 print('\n')
 print('Classification Report:')
 clf_rpt = classification_report(y1_test, y_pred_SMOTE_HPO)
@@ -384,12 +450,20 @@ print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_SMOTE_model.predict_proba(X1_test)[:, 1]
 
-print('The best model from SMOTE Bayes optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
+print('The best model from SMOTE Bayes optimization 100 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
 bayes_params = pd.DataFrame(columns = list(ast.literal_eval(results.loc[0, 'params']).keys()),
                             index = list(range(len(results))))
+
+# Convert data types for graphing
+bayes_params['colsample_bytree'] = bayes_params['colsample_bytree'].astype('float64')
+bayes_params['learning_rate'] = bayes_params['learning_rate'].astype('float64')
+bayes_params['num_leaves'] = bayes_params['num_leaves'].astype('float64')
+bayes_params['reg_alpha'] = bayes_params['reg_alpha'].astype('float64')
+bayes_params['reg_lambda'] = bayes_params['reg_lambda'].astype('float64')
+bayes_params['subsample'] = bayes_params['subsample'].astype('float64')
 
 # Add the results with each parameter a different column
 for i, params in enumerate(results['params']):
@@ -399,14 +473,970 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Save parameters to df
-bayes_params.to_csv('bayes_params_HPO_SMOTE.csv', index = False)
+bayes_params.to_csv('bayes_params_HPO_SMOTE_100.csv', index = False)
 
 # Visualize results from different boosting methods
 bayes_params['boosting_type'].value_counts().plot.bar(figsize = (10, 5),
                                                       color = 'green',
                                                       title = 'Bayes Optimization Boosting Type')
 
-print('SMOTE Bayes Optimization boosting type percentages')
+print('SMOTE Bayes Optimization 100 trials boosting type percentages')
 100 * bayes_params['boosting_type'].value_counts() / len(bayes_params)
 
+# Density plots of the learning rate distributions 
+plt.figure(figsize = (20, 8))
+plt.rcParams['font.size'] = 18
+sns.kdeplot(bayes_params['learning_rate'], label = 'Bayes Optimization', linewidth = 2)
+plt.legend(loc = 1)
+plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
+plt.show()
+
+# Create plots of Hyperparameters that are numeric
+for i, hpo in enumerate(bayes_params.columns):
+    if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise',
+                     'max_depth', 'min_sum_hessian_in_leaf']:
+        plt.figure(figsize = (14, 6))
+        # Plot the random search distribution and the bayes search distribution
+        if hpo != 'loss':
+            sns.kdeplot(bayes_params[hpo], label = 'Bayes Optimization')
+            plt.legend(loc = 0)
+            plt.title('{} Distribution'.format(hpo))
+            plt.xlabel('{}'.format(hpo)); plt.ylabel('Density')
+            plt.tight_layout()
+            plt.show()
+
+# Map boosting type to integer (essentially label encoding)
+bayes_params['boosting_int'] = bayes_params['boosting_type'].replace({'goss': 0, 'dart': 1, 'gbdt': 2})
+
+# Plot the boosting type over the search
+plt.plot(bayes_params['iteration'], bayes_params['boosting_int'], 'ro')
+plt.yticks([0, 1, 2], ['goss', 'dart', 'gbdt']);
+plt.xlabel('Iteration'); plt.title('Boosting Type over trials')
+plt.show()
+
+# Plot quantitative hyperparameters
+fig, axs = plt.subplots(1, 4, figsize = (20, 5))
+i = 0
+for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 'num_leaves']):
+    
+        # Scatterplot
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+# Scatterplot of regularization hyperparameters
+fig, axs = plt.subplots(1, 2, figsize = (14, 6))
+i = 0
+for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+###############################################################################
+######################## light GBM HPO for Upsampling Set #####################
+################################# 500 Trials ##################################
+###############################################################################
+# Create a lgb dataset
+params = {'verbose': -1}
+train_set = lgb.Dataset(X_train, label = y_train, params=params)
+
+# Define an objective function
+NUM_EVAL = 500
+    
+# Define the parameter grid
+param_grid = {
+    'force_col_wise': hp.choice('force_col_wise', "+"),
+    'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(1)),
+    'max_depth': hp.choice('max_depth', np.arange(5, 6, dtype=int)),
+    'num_leaves': hp.choice('num_leaves', np.arange(30, 100, dtype=int)),
+    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 'subsample': hp.uniform('gdbt_subsample', 0.5, 1)}, 
+                                                 {'boosting_type': 'dart', 'subsample': hp.uniform('dart_subsample', 0.5, 1)},
+                                                 {'boosting_type': 'goss', 'subsample': 1.0}]),
+    'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0),
+    'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
+    'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
+}
+
+# Select the optimization algorithm
+tpe_algorithm = tpe.suggest
+
+# File to save results
+out_file = 'lightGBM_HPO_Upsampling_500.csv'
+of_connection = open(out_file, 'w')
+writer = csv.writer(of_connection)
+
+# Write the headers to the file
+writer.writerow(['loss', 'params', 'iteration', 'estimators', 'train_time'])
+of_connection.close()
+
+# Set global variable and HPO is run with fmin
+global ITERATION
+ITERATION = 0
+bayesOpt_Upsampling_trials = Trials()
+
+best_param = fmin(objective, param_grid, algo=tpe.suggest,
+                  max_evals=NUM_EVAL, trials=bayesOpt_Upsampling_trials,
+                  rstate=np.random.RandomState(42))
+
+# Sort the trials with lowest loss (highest AUC) 
+bayesOpt_Upsampling_trials_results = sorted(bayesOpt_Upsampling_trials.results,
+                                            key = lambda x: x['loss'])
+print('Upsampling HPO 500 trials: Top two trials with the lowest loss (highest AUC)')
+print(bayesOpt_Upsampling_trials_results[:2])
+
+# Read results from csv
+results = pd.read_csv('lightGBM_HPO_Upsampling_500.csv')
+
+# Sort best scores
+results.sort_values('loss', ascending = True, inplace = True)
+results.reset_index(inplace = True, drop = True)
+
+# Convert from a string to a dictionary for later use
+ast.literal_eval(results.loc[0, 'params'])
+
+# Evaluate Best Results
+# Extract the number of estimators and hyperparameters from best AUC
+best_bayes_estimators = int(results.loc[0, 'estimators'])
+best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
+
+# Use the HPO from best model fit a model
+best_bayes_Upsampling_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators,
+                                      n_jobs = -1, objective = 'binary',
+                                      random_state = seed_value, **best_bayes_params)
+
+# Fit the model
+best_bayes_Upsampling_model.fit(X_train, y_train)
+
+# Save model
+Pkl_Filename = 'LoanStatus_lightGBM_Upsampling_BayesHyperopt_500.pkl' 
+
+with open(Pkl_Filename, 'wb') as file:  
+    pickle.dump(best_bayes_Upsampling_model, file)
+
+# Predict based on training 
+y_pred_Upsampling_HPO = best_bayes_Upsampling_model.predict(X_test)
+
+print('Results from lightGBM HPO 500 Trials on Upsampling Data:')
+print('\n')
+print('Classification Report:')
+clf_rpt = classification_report(y_test, y_pred_Upsampling_HPO)
+print(clf_rpt)
+print('\n')
+print('Confusion matrix:')
+print(confusion_matrix(y_test, y_pred_Upsampling_HPO))
+print('\n')
+print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_Upsampling_HPO))
+print('Precision score : %.3f'%precision_score(y_test, y_pred_Upsampling_HPO))
+print('Recall score : %.3f'%recall_score(y_test, y_pred_Upsampling_HPO))
+print('F1 score : %.3f'%f1_score(y_test, y_pred_Upsampling_HPO))
+
+# Evaluate predictive probability on the testing data 
+preds = best_bayes_Upsampling_model.predict_proba(X_test)[:, 1]
+
+print('The best model from Upsampling Bayes 500 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, preds)))
+print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
+
+# Create a new dataframe for storing parameters
+bayes_params = pd.DataFrame(columns = list(ast.literal_eval(results.loc[0, 'params']).keys()),
+                            index = list(range(len(results))))
+
+# Convert data types for graphing
+bayes_params['colsample_bytree'] = bayes_params['colsample_bytree'].astype('float64')
+bayes_params['learning_rate'] = bayes_params['learning_rate'].astype('float64')
+bayes_params['num_leaves'] = bayes_params['num_leaves'].astype('float64')
+bayes_params['reg_alpha'] = bayes_params['reg_alpha'].astype('float64')
+bayes_params['reg_lambda'] = bayes_params['reg_lambda'].astype('float64')
+bayes_params['subsample'] = bayes_params['subsample'].astype('float64')
+
+# Add the results with each parameter a different column
+for i, params in enumerate(results['params']):
+    bayes_params.loc[i, :] = list(ast.literal_eval(params).values())
+    
+bayes_params['loss'] = results['loss']
+bayes_params['iteration'] = results['iteration']
+
+# Save parameters to df
+bayes_params.to_csv('bayes_params_HPO_Upsampling_500.csv', index = False)
+
+# Visualize results from different boosting methods
+bayes_params['boosting_type'].value_counts().plot.bar(figsize = (10, 5),
+                                                      color = 'blue',
+                                                      title = 'Bayes Optimization Boosting Type')
+
+print('Upsampling Bayes 500 Trials Optimization boosting type percentages')
+100 * bayes_params['boosting_type'].value_counts() / len(bayes_params)
+
+# Density plots of the learning rate distributions 
+plt.figure(figsize = (20, 8))
+plt.rcParams['font.size'] = 18
+sns.kdeplot(bayes_params['learning_rate'], label = 'Bayes Optimization', linewidth = 2)
+plt.legend(loc = 1)
+plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
+plt.show()
+
+# Create plots of Hyperparameters that are numeric
+for i, hpo in enumerate(bayes_params.columns):
+    if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise',
+                     'max_depth', 'min_sum_hessian_in_leaf']:
+        plt.figure(figsize = (14, 6))
+        # Plot the random search distribution and the bayes search distribution
+        if hpo != 'loss':
+            sns.kdeplot(bayes_params[hpo], label = 'Bayes Optimization')
+            plt.legend(loc = 0)
+            plt.title('{} Distribution'.format(hpo))
+            plt.xlabel('{}'.format(hpo)); plt.ylabel('Density')
+            plt.tight_layout()
+            plt.show()
+
+# Map boosting type to integer (essentially label encoding)
+bayes_params['boosting_int'] = bayes_params['boosting_type'].replace({'goss': 0, 'dart': 1, 'gbdt': 2})
+
+# Plot the boosting type over the search
+plt.plot(bayes_params['iteration'], bayes_params['boosting_int'], 'ro')
+plt.yticks([0, 1, 2], ['goss', 'dart', 'gbdt']);
+plt.xlabel('Iteration'); plt.title('Boosting Type over trials')
+plt.show()
+
+# Plot quantitative hyperparameters
+fig, axs = plt.subplots(1, 4, figsize = (20, 5))
+i = 0
+for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 'num_leaves']):
+    
+        # Scatterplot
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+# Scatterplot of regularization hyperparameters
+fig, axs = plt.subplots(1, 2, figsize = (14, 6))
+i = 0
+for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+###############################################################################
+################# light GBM using GBDT HPO for Upsampling Set #################
+############################# 300 Trials ######################################
+###############################################################################
+# GBDT has lowest loss for Upsampling initial exploration
+# Create a lgb dataset
+params = {'verbose': -1}
+train_set = lgb.Dataset(X_train, label = y_train, params=params)
+
+NUM_EVAL = 300
+
+param_grid = {
+    'force_col_wise': hp.choice('force_col_wise', "+"),
+    'learning_rate': hp.loguniform('learning_rate', np.log(0.001), np.log(1)),
+    'bagging_fraction': hp.uniform('bagging_fraction', 0.5, 0.8),
+    'bagging_frequency': hp.uniform('bagging_frequency', 5, 8),
+    'feature_fraction': hp.uniform('feature_fraction', 0.5, 0.8),
+    'min_sum_hessian_in_leaf': hp.choice('min_sum_hessian_in_leaf',  np.arange(0.1, 1, dtype=int)),
+    'max_depth': hp.choice('max_depth', np.arange(3, 15, dtype=int)),
+    'num_leaves': hp.choice('num_leaves', np.arange(30, 200, dtype=int)),
+    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 'subsample': hp.uniform('gdbt_subsample', 0.3, 1)}]),
+    'colsample_bytree': hp.choice('colsample_by_tree', np.arange(1, 7, dtype=int)),
+    'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
+    'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
+}
+
+# File to save results
+out_file = 'lightGBM_GBDT_HPO_Upsampling_300.csv'
+of_connection = open(out_file, 'w')
+writer = csv.writer(of_connection)
+
+# Write the headers to the file
+writer.writerow(['loss', 'params', 'iteration', 'estimators', 'train_time'])
+of_connection.close()
+
+# Select the optimization algorithm
+tpe_algorithm = tpe.suggest
+
+# Set global variable and HPO is run with fmin
+global ITERATION
+ITERATION = 0
+bayesOpt_Upsampling_trials = Trials()
+
+best_param = fmin(objective, param_grid, algo=tpe.suggest,
+                  max_evals=NUM_EVAL, trials=bayesOpt_Upsampling_trials,
+                  rstate=np.random.RandomState(42))
+
+# Sort the trials with lowest loss (highest AUC) 
+bayesOpt_Upsampling_trials_results = sorted(bayesOpt_Upsampling_trials.results,
+                                            key = lambda x: x['loss'])
+print('Upsampling HPO GBDT 300 trials: Top two trials with the lowest loss (highest AUC)')
+print(bayesOpt_Upsampling_trials_results[:2])
+
+# Read results from csv
+results = pd.read_csv('lightGBM_GBDT_HPO_Upsampling_300.csv')
+
+# Sort best scores
+results.sort_values('loss', ascending = True, inplace = True)
+results.reset_index(inplace = True, drop = True)
+
+# Convert from a string to a dictionary for later use
+ast.literal_eval(results.loc[0, 'params'])
+
+# Evaluate Best Results
+# Extract the number of estimators and hyperparameters from best AUC
+best_bayes_estimators = int(results.loc[0, 'estimators'])
+best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
+
+# Use the HPO from best model fit a model
+best_bayes_Upsampling_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators,
+                                      n_jobs = -1, objective = 'binary',
+                                      random_state = seed_value, **best_bayes_params)
+
+# Fit the model
+best_bayes_Upsampling_model.fit(X_train, y_train)
+
+# Save model
+Pkl_Filename = 'LoanStatus_lightGBM_GBDT_Upsampling_BayesHyperopt_300.pkl' 
+
+with open(Pkl_Filename, 'wb') as file:  
+    pickle.dump(best_bayes_Upsampling_model, file)
+
+# Predict based on training 
+y_pred_Upsampling_HPO = best_bayes_Upsampling_model.predict(X_test)
+
+print('Results from lightGBM GBDT HPO 300 trials on Upsampling Data:')
+print('\n')
+print('Classification Report:')
+clf_rpt = classification_report(y_test, y_pred_Upsampling_HPO)
+print(clf_rpt)
+print('\n')
+print('Confusion matrix:')
+print(confusion_matrix(y_test, y_pred_Upsampling_HPO))
+print('\n')
+print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_Upsampling_HPO))
+print('Precision score : %.3f'%precision_score(y_test, y_pred_Upsampling_HPO))
+print('Recall score : %.3f'%recall_score(y_test, y_pred_Upsampling_HPO))
+print('F1 score : %.3f'%f1_score(y_test, y_pred_Upsampling_HPO))
+
+# Evaluate predictive probability on the testing data 
+preds = best_bayes_Upsampling_model.predict_proba(X_test)[:, 1]
+
+print('The best model from Upsampling GBDT Bayes optimization 300 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, preds)))
+print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
+
+# Create a new dataframe for storing parameters
+bayes_params = pd.DataFrame(columns = list(ast.literal_eval(results.loc[0, 'params']).keys()),
+                            index = list(range(len(results))))
+
+# Convert data types for graphing
+bayes_params['colsample_bytree'] = bayes_params['colsample_bytree'].astype('float64')
+bayes_params['learning_rate'] = bayes_params['learning_rate'].astype('float64')
+bayes_params['feature_fraction'] = bayes_params['feature_fraction'].astype('float64')
+bayes_params['bagging_fraction'] = bayes_params['bagging_fraction'].astype('float64')
+bayes_params['bagging_frequency'] = bayes_params['bagging_frequency'].astype('float64')
+bayes_params['num_leaves'] = bayes_params['num_leaves'].astype('float64')
+bayes_params['reg_alpha'] = bayes_params['reg_alpha'].astype('float64')
+bayes_params['reg_lambda'] = bayes_params['reg_lambda'].astype('float64')
+bayes_params['subsample'] = bayes_params['subsample'].astype('float64')
+
+# Add the results with each parameter a different column
+for i, params in enumerate(results['params']):
+    bayes_params.loc[i, :] = list(ast.literal_eval(params).values())
+    
+bayes_params['loss'] = results['loss']
+bayes_params['iteration'] = results['iteration']
+
+# Save parameters to df
+bayes_params.to_csv('bayes_params_HPO_GBDT_Upsampling_300.csv', index = False)
+
+# Density plots of the learning rate distributions 
+plt.figure(figsize = (20, 8))
+plt.rcParams['font.size'] = 18
+sns.kdeplot(bayes_params['learning_rate'], label = 'Bayes Optimization', linewidth = 2)
+plt.legend(loc = 1)
+plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
+plt.show()
+
+# Create plots of Hyperparameters that are numeric 
+for i, hpo in enumerate(bayes_params.columns):
+    if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise',
+                     'max_depth', 'min_sum_hessian_in_leaf']:
+        plt.figure(figsize = (14, 6))
+        # Plot the random search distribution and the bayes search distribution
+        if hpo != 'loss':
+            sns.kdeplot(bayes_params[hpo], label = 'Bayes Optimization')
+            plt.legend(loc = 0)
+            plt.title('{} Distribution'.format(hpo))
+            plt.xlabel('{}'.format(hpo)); plt.ylabel('Density')
+            plt.tight_layout()
+            plt.show()
+
+# Map boosting type to integer (essentially label encoding)
+bayes_params['boosting_int'] = bayes_params['boosting_type'].replace({'gbdt': 0})
+
+# Plot the boosting type over the search
+plt.plot(bayes_params['iteration'], bayes_params['boosting_int'], 'ro')
+plt.yticks([0], ['gbdt']);
+plt.xlabel('Iteration'); plt.title('Boosting Type over trials')
+plt.show()
+
+# Plot quantitive hyperparameters
+fig, axs = plt.subplots(1, 6, figsize = (20, 5))
+i = 0
+for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'num_leaves',
+                         'bagging_fraction', 'bagging_frequency',
+                         'feature_fraction']):
+        # Scatterplot
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+# Scatterplot of regularization hyperparameters
+fig, axs = plt.subplots(1, 2, figsize = (14, 6))
+i = 0
+for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+###############################################################################
+######################### light GBM HPO for SMOTE Set #########################
+################################## 300 Trials #################################
+###############################################################################
+# Create a lgb dataset
+params = {'verbose': -1}
+train_set = lgb.Dataset(X1_train, label = y1_train, params=params)
+
+NUM_EVAL = 300
+
+# Define the parameter grid
+param_grid = {
+    'force_col_wise': hp.choice('force_col_wise', "+"),
+    'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(1)),
+    'max_depth': hp.choice('max_depth', np.arange(5, 6, dtype=int)),
+    'num_leaves': hp.choice('num_leaves', np.arange(30, 100, dtype=int)),
+    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 'subsample': hp.uniform('gdbt_subsample', 0.5, 1)}, 
+                                                 {'boosting_type': 'dart', 'subsample': hp.uniform('dart_subsample', 0.5, 1)},
+                                                 {'boosting_type': 'goss', 'subsample': 1.0}]),
+    'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0),
+    'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
+    'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
+}
+# File to save results
+out_file = 'lightGBM_HPO_SMOTE_300.csv'
+of_connection = open(out_file, 'w')
+writer = csv.writer(of_connection)
+
+# Write the headers to the file
+writer.writerow(['loss', 'params', 'iteration', 'estimators', 'train_time'])
+of_connection.close()
+
+# Set global variable and HPO is run with fmin
+global ITERATION
+ITERATION = 0
+bayesOpt_SMOTE_trials = Trials()
+
+best_param = fmin(objective, param_grid, algo=tpe.suggest,
+                  max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
+                  rstate=np.random.RandomState(42))
+
+# Sort the trials with lowest loss (highest AUC) 
+bayesOpt_SMOTE_trials_results = sorted(bayesOpt_SMOTE_trials.results,
+                                       key = lambda x: x['loss'])
+print('SMOTE HPO 300 trials: Top two trials with the lowest loss (highest AUC)')
+print(bayesOpt_SMOTE_trials_results[:2])
+
+# Read results from csv
+results = pd.read_csv('lightGBM_HPO_SMOTE_300.csv')
+
+# Sort best scores
+results.sort_values('loss', ascending = True, inplace = True)
+results.reset_index(inplace = True, drop = True)
+
+# Convert from a string to a dictionary for later use
+ast.literal_eval(results.loc[0, 'params'])
+
+# Evaluate Best Results
+# Extract the number of estimators and hyperparameters from best AUC
+best_bayes_estimators = int(results.loc[0, 'estimators'])
+best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
+
+# Use the HPO from best model fit a model
+best_bayes_SMOTE_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators,
+                                      n_jobs = -1, objective = 'binary',
+                                      random_state = seed_value, **best_bayes_params)
+
+# Fit the model
+best_bayes_SMOTE_model.fit(X1_train, y1_train)
+
+# Save model
+Pkl_Filename = 'LoanStatus_lightGBM_SMOTE_BayesHyperopt_300.pkl' 
+
+with open(Pkl_Filename, 'wb') as file:  
+    pickle.dump(best_bayes_SMOTE_model, file)
+
+# Predict based on training 
+y_pred_SMOTE_HPO = best_bayes_SMOTE_model.predict(X1_test)
+
+print('Results from lightGBM HPO 300 trials on SMOTE Data:')
+print('\n')
+print('Classification Report:')
+clf_rpt = classification_report(y1_test, y_pred_SMOTE_HPO)
+print(clf_rpt)
+print('\n')
+print('Confusion matrix:')
+print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
+print('\n')
+print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f'%recall_score(y1_test,y_pred_SMOTE_HPO))
+print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
+
+# Evaluate predictive probability on the testing data 
+preds = best_bayes_SMOTE_model.predict_proba(X1_test)[:, 1]
+
+print('The best model from SMOTE Bayes optimization 300 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
+print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
+
+# Create a new dataframe for storing parameters
+bayes_params = pd.DataFrame(columns = list(ast.literal_eval(results.loc[0, 'params']).keys()),
+                            index = list(range(len(results))))
+
+# Convert data types for graphing
+bayes_params['colsample_bytree'] = bayes_params['colsample_bytree'].astype('float64')
+bayes_params['learning_rate'] = bayes_params['learning_rate'].astype('float64')
+bayes_params['num_leaves'] = bayes_params['num_leaves'].astype('float64')
+bayes_params['reg_alpha'] = bayes_params['reg_alpha'].astype('float64')
+bayes_params['reg_lambda'] = bayes_params['reg_lambda'].astype('float64')
+bayes_params['subsample'] = bayes_params['subsample'].astype('float64')
+
+# Add the results with each parameter a different column
+for i, params in enumerate(results['params']):
+    bayes_params.loc[i, :] = list(ast.literal_eval(params).values())
+    
+bayes_params['loss'] = results['loss']
+bayes_params['iteration'] = results['iteration']
+
+# Save parameters to df
+bayes_params.to_csv('bayes_params_HPO_SMOTE_300.csv', index = False)
+
+# Visualize results from different boosting methods
+bayes_params['boosting_type'].value_counts().plot.bar(figsize = (10, 5),
+                                                      color = 'green',
+                                                      title = 'Bayes Optimization Boosting Type')
+
+print('SMOTE Bayes Optimization 300 trials boosting type percentages')
+100 * bayes_params['boosting_type'].value_counts() / len(bayes_params)
+
+# Density plots of the learning rate distributions 
+plt.figure(figsize = (20, 8))
+plt.rcParams['font.size'] = 18
+sns.kdeplot(bayes_params['learning_rate'], label = 'Bayes Optimization', linewidth = 2)
+plt.legend(loc = 1)
+plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
+plt.show()
+
+# Create plots of Hyperparameters that are numeric
+for i, hpo in enumerate(bayes_params.columns):
+    if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise',
+                     'max_depth', 'min_sum_hessian_in_leaf']:
+        plt.figure(figsize = (14, 6))
+        # Plot the random search distribution and the bayes search distribution
+        if hpo != 'loss':
+            sns.kdeplot(bayes_params[hpo], label = 'Bayes Optimization')
+            plt.legend(loc = 0)
+            plt.title('{} Distribution'.format(hpo))
+            plt.xlabel('{}'.format(hpo)); plt.ylabel('Density')
+            plt.tight_layout()
+            plt.show()
+
+# Map boosting type to integer (essentially label encoding)
+bayes_params['boosting_int'] = bayes_params['boosting_type'].replace({'goss': 0, 'dart': 1, 'gbdt': 2})
+
+# Plot the boosting type over the search
+plt.plot(bayes_params['iteration'], bayes_params['boosting_int'], 'ro')
+plt.yticks([0, 1, 2], ['goss', 'dart', 'gbdt']);
+plt.xlabel('Iteration'); plt.title('Boosting Type over trials')
+plt.show()
+
+# Plot quantitative hyperparameters
+fig, axs = plt.subplots(1, 4, figsize = (20, 5))
+i = 0
+for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 'num_leaves']): 
+        # Scatterplot
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+# Scatterplot of regularization hyperparameters
+fig, axs = plt.subplots(1, 2, figsize = (14, 6))
+i = 0
+for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+###############################################################################
+######################### light GBM HPO for SMOTE Set #########################
+################################# 500 Trials ##################################
+###############################################################################
+# Create a lgb dataset
+params = {'verbose': -1}
+train_set = lgb.Dataset(X1_train, label = y1_train, params=params)
+
+NUM_EVAL = 500
+
+# Define the parameter grid
+param_grid = {
+    'force_col_wise': hp.choice('force_col_wise', "+"),
+    'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(1)),
+    'max_depth': hp.choice('max_depth', np.arange(5, 6, dtype=int)),
+    'num_leaves': hp.choice('num_leaves', np.arange(30, 100, dtype=int)),
+    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 'subsample': hp.uniform('gdbt_subsample', 0.5, 1)}, 
+                                                 {'boosting_type': 'dart', 'subsample': hp.uniform('dart_subsample', 0.5, 1)},
+                                                 {'boosting_type': 'goss', 'subsample': 1.0}]),
+    'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0),
+    'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
+    'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
+}
+# File to save results
+out_file = 'lightGBM_HPO_SMOTE_500.csv'
+of_connection = open(out_file, 'w')
+writer = csv.writer(of_connection)
+
+# Write the headers to the file
+writer.writerow(['loss', 'params', 'iteration', 'estimators', 'train_time'])
+of_connection.close()
+
+# Set global variable and HPO is run with fmin
+global ITERATION
+ITERATION = 0
+bayesOpt_SMOTE_trials = Trials()
+
+best_param = fmin(objective, param_grid, algo=tpe.suggest,
+                  max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
+                  rstate=np.random.RandomState(42))
+
+# Sort the trials with lowest loss (highest AUC) 
+bayesOpt_SMOTE_trials_results = sorted(bayesOpt_SMOTE_trials.results,
+                                       key = lambda x: x['loss'])
+print('SMOTE HPO 500 trials: Top two trials with the lowest loss (highest AUC)')
+print(bayesOpt_SMOTE_trials_results[:2])
+
+# Read results from csv
+results = pd.read_csv('lightGBM_HPO_SMOTE_500.csv')
+
+# Sort best scores
+results.sort_values('loss', ascending = True, inplace = True)
+results.reset_index(inplace = True, drop = True)
+
+# Convert from a string to a dictionary for later use
+ast.literal_eval(results.loc[0, 'params'])
+
+# Evaluate Best Results
+# Extract the number of estimators and hyperparameters from best AUC
+best_bayes_estimators = int(results.loc[0, 'estimators'])
+best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
+
+# Use the HPO from best model fit a model
+best_bayes_SMOTE_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators,
+                                      n_jobs = -1, objective = 'binary',
+                                      random_state = seed_value, **best_bayes_params)
+
+# Fit the model
+best_bayes_SMOTE_model.fit(X1_train, y1_train)
+
+# Save model
+Pkl_Filename = 'LoanStatus_lightGBM_SMOTE_BayesHyperopt_500.pkl' 
+
+with open(Pkl_Filename, 'wb') as file:  
+    pickle.dump(best_bayes_SMOTE_model, file)
+
+# Predict based on training 
+y_pred_SMOTE_HPO = best_bayes_SMOTE_model.predict(X1_test)
+
+print('Results from lightGBM HPO 500 trials on SMOTE Data:')
+print('\n')
+print('Classification Report:')
+clf_rpt = classification_report(y1_test, y_pred_SMOTE_HPO)
+print(clf_rpt)
+print('\n')
+print('Confusion matrix:')
+print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
+print('\n')
+print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f'%recall_score(y1_test,y_pred_SMOTE_HPO))
+print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
+
+# Evaluate predictive probability on the testing data 
+preds = best_bayes_SMOTE_model.predict_proba(X1_test)[:, 1]
+
+print('The best model from SMOTE Bayes optimization 500 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
+print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
+
+# Create a new dataframe for storing parameters
+bayes_params = pd.DataFrame(columns = list(ast.literal_eval(results.loc[0, 'params']).keys()),
+                            index = list(range(len(results))))
+
+# Convert data types for graphing
+bayes_params['colsample_bytree'] = bayes_params['colsample_bytree'].astype('float64')
+bayes_params['learning_rate'] = bayes_params['learning_rate'].astype('float64')
+bayes_params['num_leaves'] = bayes_params['num_leaves'].astype('float64')
+bayes_params['reg_alpha'] = bayes_params['reg_alpha'].astype('float64')
+bayes_params['reg_lambda'] = bayes_params['reg_lambda'].astype('float64')
+bayes_params['subsample'] = bayes_params['subsample'].astype('float64')
+
+# Add the results with each parameter a different column
+for i, params in enumerate(results['params']):
+    bayes_params.loc[i, :] = list(ast.literal_eval(params).values())
+    
+bayes_params['loss'] = results['loss']
+bayes_params['iteration'] = results['iteration']
+
+# Save parameters to df
+bayes_params.to_csv('bayes_params_HPO_SMOTE_500.csv', index = False)
+
+# Visualize results from different boosting methods
+bayes_params['boosting_type'].value_counts().plot.bar(figsize = (10, 5),
+                                                      color = 'green',
+                                                      title = 'Bayes Optimization Boosting Type')
+
+print('SMOTE Bayes Optimization 500 trials boosting type percentages')
+100 * bayes_params['boosting_type'].value_counts() / len(bayes_params)
+
+# Density plots of the learning rate distributions 
+plt.figure(figsize = (20, 8))
+plt.rcParams['font.size'] = 18
+sns.kdeplot(bayes_params['learning_rate'], label = 'Bayes Optimization', linewidth = 2)
+plt.legend(loc = 1)
+plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
+plt.show()
+
+# Create plots of Hyperparameters that are numeric
+for i, hpo in enumerate(bayes_params.columns):
+    if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise',
+                     'max_depth', 'min_sum_hessian_in_leaf']:
+        plt.figure(figsize = (14, 6))
+        # Plot the random search distribution and the bayes search distribution
+        if hpo != 'loss':
+            sns.kdeplot(bayes_params[hpo], label = 'Bayes Optimization')
+            plt.legend(loc = 0)
+            plt.title('{} Distribution'.format(hpo))
+            plt.xlabel('{}'.format(hpo)); plt.ylabel('Density')
+            plt.tight_layout()
+            plt.show()
+
+# Map boosting type to integer (essentially label encoding)
+bayes_params['boosting_int'] = bayes_params['boosting_type'].replace({'goss': 0, 'dart': 1, 'gbdt': 2})
+
+# Plot the boosting type over the search
+plt.plot(bayes_params['iteration'], bayes_params['boosting_int'], 'ro')
+plt.yticks([0, 1, 2], ['goss', 'dart', 'gbdt']);
+plt.xlabel('Iteration'); plt.title('Boosting Type over trials')
+plt.show()
+
+# Plot quantitative hyperparameters
+fig, axs = plt.subplots(1, 4, figsize = (20, 5))
+i = 0
+for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 'num_leaves']):
+    
+        # Scatterplot
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+# Scatterplot of regularization hyperparameters
+fig, axs = plt.subplots(1, 2, figsize = (14, 6))
+i = 0
+for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+###############################################################################
+######################### light GBM HPO for SMOTE Set #########################
+################################## GOSS & DART ################################
+################################# 500 Trials ##################################
+###############################################################################
+# Create a lgb dataset
+params = {'verbose': -1}
+train_set = lgb.Dataset(X1_train, label = y1_train, params=params)
+
+NUM_EVAL = 500
+
+# Define the parameter grid
+param_grid = {
+    'force_col_wise': hp.choice('force_col_wise', "+"),
+    'learning_rate': hp.loguniform('learning_rate', np.log(0.001), np.log(1)),
+    'max_depth': hp.choice('max_depth', np.arange(3, 10, dtype=int)),
+    'num_leaves': hp.choice('num_leaves', np.arange(30, 150, dtype=int)),
+    'min_sum_hessian_in_leaf': hp.choice('min_sum_hessian_in_leaf',  np.arange(0.1, 1, dtype=int)),
+    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'dart', 'subsample': hp.uniform('dart_subsample', 0.5, 1)},
+                                                 {'boosting_type': 'goss', 'subsample': 1.0}]),
+    'colsample_bytree': hp.uniform('colsample_by_tree', 0.1, 1.0),
+    'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
+    'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
+}
+
+# File to save results
+out_file = 'lightGBM_HPO_SMOTE_500_2.csv'
+of_connection = open(out_file, 'w')
+writer = csv.writer(of_connection)
+
+# Write the headers to the file
+writer.writerow(['loss', 'params', 'iteration', 'estimators', 'train_time'])
+of_connection.close()
+
+# Set global variable and HPO is run with fmin
+global ITERATION
+ITERATION = 0
+bayesOpt_SMOTE_trials = Trials()
+
+best_param = fmin(objective, param_grid, algo=tpe.suggest,
+                  max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
+                  rstate=np.random.RandomState(42))
+
+# Sort the trials with lowest loss (highest AUC) 
+bayesOpt_SMOTE_trials_results = sorted(bayesOpt_SMOTE_trials.results,
+                                       key = lambda x: x['loss'])
+print('SMOTE HPO 500 trials GOSS DART: Top two trials with the lowest loss (highest AUC)')
+print(bayesOpt_SMOTE_trials_results[:2])
+
+# Read results from csv
+results = pd.read_csv('lightGBM_HPO_SMOTE_500_2.csv')
+
+# Sort best scores
+results.sort_values('loss', ascending = True, inplace = True)
+results.reset_index(inplace = True, drop = True)
+
+# Convert from a string to a dictionary for later use
+ast.literal_eval(results.loc[0, 'params'])
+
+# Evaluate Best Results
+# Extract the number of estimators and hyperparameters from best AUC
+best_bayes_estimators = int(results.loc[0, 'estimators'])
+best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
+
+# Use the HPO from best model fit a model
+best_bayes_SMOTE_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators,
+                                      n_jobs = -1, objective = 'binary',
+                                      random_state = seed_value, **best_bayes_params)
+
+# Fit the model
+best_bayes_SMOTE_model.fit(X1_train, y1_train)
+
+# Save model
+Pkl_Filename = 'LoanStatus_lightGBM_SMOTE_BayesHyperopt_500_2.pkl' 
+
+with open(Pkl_Filename, 'wb') as file:  
+    pickle.dump(best_bayes_SMOTE_model, file)
+
+# Predict based on training 
+y_pred_SMOTE_HPO = best_bayes_SMOTE_model.predict(X1_test)
+
+print('Results from lightGBM HPO 500 trials GOSS DART on SMOTE Data:')
+print('\n')
+print('Classification Report:')
+clf_rpt = classification_report(y1_test, y_pred_SMOTE_HPO)
+print(clf_rpt)
+print('\n')
+print('Confusion matrix:')
+print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
+print('\n')
+print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f'%recall_score(y1_test,y_pred_SMOTE_HPO))
+print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
+
+# Evaluate predictive probability on the testing data 
+preds = best_bayes_SMOTE_model.predict_proba(X1_test)[:, 1]
+
+print('The best model from SMOTE Bayes optimization 500 trials GOSS DART scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
+print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
+
+# Create a new dataframe for storing parameters
+bayes_params = pd.DataFrame(columns = list(ast.literal_eval(results.loc[0, 'params']).keys()),
+                            index = list(range(len(results))))
+# Convert data types for graphing
+bayes_params['colsample_bytree'] = bayes_params['colsample_bytree'].astype('float64')
+bayes_params['learning_rate'] = bayes_params['learning_rate'].astype('float64')
+bayes_params['num_leaves'] = bayes_params['num_leaves'].astype('float64')
+bayes_params['reg_alpha'] = bayes_params['reg_alpha'].astype('float64')
+bayes_params['reg_lambda'] = bayes_params['reg_lambda'].astype('float64')
+bayes_params['subsample'] = bayes_params['subsample'].astype('float64')
+
+# Add the results with each parameter a different column
+for i, params in enumerate(results['params']):
+    bayes_params.loc[i, :] = list(ast.literal_eval(params).values())
+    
+bayes_params['loss'] = results['loss']
+bayes_params['iteration'] = results['iteration']
+
+# Save parameters to df
+bayes_params.to_csv('bayes_params_HPO_SMOTE_500_2.csv', index = False)
+
+# Visualize results from different boosting methods
+bayes_params['boosting_type'].value_counts().plot.bar(figsize = (10, 5),
+                                                      color = 'green',
+                                                      title = 'Bayes Optimization Boosting Type')
+
+print('SMOTE Bayes Optimization 500 trials GOSS DART boosting type percentages')
+100 * bayes_params['boosting_type'].value_counts() / len(bayes_params)
+
+# Density plots of the learning rate distributions 
+plt.figure(figsize = (20, 8))
+plt.rcParams['font.size'] = 18
+sns.kdeplot(bayes_params['learning_rate'], label = 'Bayes Optimization', linewidth = 2)
+plt.legend(loc = 1)
+plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
+plt.show()
+
+# Create plots of Hyperparameters that are numeric
+for i, hpo in enumerate(bayes_params.columns):
+    if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise',
+                     'max_depth', 'min_sum_hessian_in_leaf']:
+        plt.figure(figsize = (14, 6))
+        # Plot the random search distribution and the bayes search distribution
+        if hpo != 'loss':
+            sns.kdeplot(bayes_params[hpo], label = 'Bayes Optimization')
+            plt.legend(loc = 0)
+            plt.title('{} Distribution'.format(hpo))
+            plt.xlabel('{}'.format(hpo)); plt.ylabel('Density');
+            plt.show()
+
+# Map boosting type to integer (essentially label encoding)
+bayes_params['boosting_int'] = bayes_params['boosting_type'].replace({'goss': 0, 'dart': 1})
+
+# Plot the boosting type over the search
+plt.plot(bayes_params['iteration'], bayes_params['boosting_int'], 'ro')
+plt.yticks([0, 1], ['goss', 'dart']);
+plt.xlabel('Iteration'); plt.title('Boosting Type over trials')
+plt.show()
+
+# Plot quantitative hyperparameters
+fig, axs = plt.subplots(1, 4, figsize = (20, 5))
+i = 0
+for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'num_leaves']):
+    
+        # Scatterplot
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
+
+# Scatterplot of regularization hyperparameters
+fig, axs = plt.subplots(1, 2, figsize = (14, 6))
+i = 0
+for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
+        sns.regplot('iteration', hpo, data = bayes_params, ax = axs[i])
+        axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
+plt.tight_layout()
+plt.show()
 ###############################################################################
