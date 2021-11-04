@@ -35,6 +35,15 @@ from sklearn.metrics import f1_score
 from sklearn.metrics import roc_auc_score
 import matplotlib.pyplot as plt
 import seaborn as sns
+import eli5 as eli
+from eli5.sklearn import PermutationImportance 
+from eli5 import show_weights
+import webbrowser
+from eli5.sklearn import explain_weights_sklearn
+from eli5.formatters import format_as_dataframe, format_as_dataframes
+from eli5 import show_prediction
+import lime
+from lime import lime_tabular
 
 path = r'D:\Loan-Status\Data'
 os.chdir(path)
@@ -370,6 +379,69 @@ plt.tight_layout()
 plt.show()
 
 ###############################################################################
+# Model metrics with Eli5
+# Compute permutation feature importance
+perm_importance = PermutationImportance(best_bayes_Upsampling_model,
+                                        random_state=seed_value).fit(X_test,
+                                                                     y_test)
+
+# Store feature weights in an object
+html_obj = eli.show_weights(perm_importance,
+                            feature_names = X.columns.tolist())
+
+# Write feature weights html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_100_WeightsFeatures.htm',
+          'wb') as f:
+    f.write(html_obj.data.encode("UTF-8"))
+
+# Open the stored feature weights HTML file
+url = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_100_WeightsFeatures.htm'
+webbrowser.open(url, new=2)
+
+
+# Explain weights
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X.columns.tolist())
+exp = format_as_dataframe(explanation)
+
+# Write processed data to csv
+exp.to_csv('loanStatus_NonLinear_best_bayes_Upsampling_100_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
+
+# Show prediction
+html_obj2 = show_prediction(best_bayes_Upsampling_model, X.iloc[1],
+                            show_feature_values=True)
+
+# Write show prediction html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_100_Prediction.htm',
+          'wb') as f:
+    f.write(html_obj2.data.encode("UTF-8"))
+
+# Open the show prediction stored HTML file
+url2 = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_100_Prediction.htm'
+webbrowser.open(url2, new=2)
+
+# Explain prediction
+#explanation_pred = eli.explain_prediction(best_bayes_Upsampling_model, np.array(X_test)[1])
+#explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_train),
+    feature_names=X.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+X_test1 = pd.DataFrame(X_test, columns=X.columns)
+
+exp = explainer.explain_instance(
+    data_row=X_test1.iloc[1],
+    predict_fn=best_bayes_Upsampling_model.predict_proba)
+
+exp.save_to_file('best_bayes_Upsampling_100_LIME.html')
+
+###############################################################################
 ######################### light GBM HPO for SMOTE Set #########################
 ################################## 100 Trials #################################
 ###############################################################################
@@ -533,6 +605,68 @@ for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
         axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
+
+###############################################################################
+# Model metrics with Eli5
+# Compute permutation feature importance
+perm_importance = PermutationImportance(best_bayes_SMOTE_model,
+                                        random_state=seed_value).fit(X1_test,
+                                                                     y1_test)
+
+# Store feature weights in an object
+html_obj = eli.show_weights(perm_importance,
+                            feature_names = X.columns.tolist())
+
+# Write feature weights html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_100_WeightsFeatures.htm',
+          'wb') as f:
+    f.write(html_obj.data.encode("UTF-8"))
+
+# Open the stored feature weights HTML file
+url = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_100_WeightsFeatures.htm'
+webbrowser.open(url, new=2)
+
+# Explain weights
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X.columns.tolist())
+exp = format_as_dataframe(explanation)
+
+# Write processed data to csv
+exp.to_csv('loanStatus_NonLinear_best_bayes_SMOTE_100_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
+
+# Show prediction
+html_obj2 = show_prediction(best_bayes_SMOTE_model, X.iloc[1],
+                            show_feature_values=True)
+
+# Write show prediction html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_100_Prediction.htm',
+          'wb') as f:
+    f.write(html_obj2.data.encode("UTF-8"))
+
+# Open the show prediction stored HTML file
+url2 = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_100_Prediction.htm'
+webbrowser.open(url2, new=2)
+
+# Explain prediction
+#explanation_pred = eli.explain_prediction(best_bayes_SMOTE_model, np.array(X_test)[1])
+#explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X1_train),
+    feature_names=X.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+X1_test1 = pd.DataFrame(X1_test, columns=X.columns)
+
+exp = explainer.explain_instance(
+    data_row=X1_test1.iloc[1],
+    predict_fn=best_bayes_SMOTE_model.predict_proba)
+
+exp.save_to_file('best_bayes_SMOTE_100_LIME.html')
 
 ###############################################################################
 ######################## light GBM HPO for Upsampling Set #####################
@@ -720,6 +854,69 @@ plt.tight_layout()
 plt.show()
 
 ###############################################################################
+# Model metrics with Eli5
+# Compute permutation feature importance
+perm_importance = PermutationImportance(best_bayes_Upsampling_model,
+                                        random_state=seed_value).fit(X_test,
+                                                                     y_test)
+
+# Store feature weights in an object
+html_obj = eli.show_weights(perm_importance,
+                            feature_names = X.columns.tolist())
+
+# Write feature weights html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_500_WeightsFeatures.htm',
+          'wb') as f:
+    f.write(html_obj.data.encode("UTF-8"))
+
+# Open the stored feature weights HTML file
+url = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_500_WeightsFeatures.htm'
+webbrowser.open(url, new=2)
+
+
+# Explain weights
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X.columns.tolist())
+exp = format_as_dataframe(explanation)
+
+# Write processed data to csv
+exp.to_csv('loanStatus_NonLinear_best_bayes_Upsampling_500_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
+
+# Show prediction
+html_obj2 = show_prediction(best_bayes_Upsampling_model, X.iloc[1],
+                            show_feature_values=True)
+
+# Write show prediction html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_500_Prediction.htm',
+          'wb') as f:
+    f.write(html_obj2.data.encode("UTF-8"))
+
+# Open the show prediction stored HTML file
+url2 = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_500_Prediction.htm'
+webbrowser.open(url2, new=2)
+
+# Explain prediction
+#explanation_pred = eli.explain_prediction(best_bayes_Upsampling_model, np.array(X_test)[1])
+#explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_train),
+    feature_names=X.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+X_test1 = pd.DataFrame(X_test, columns=X.columns)
+
+exp = explainer.explain_instance(
+    data_row=X_test1.iloc[1],
+    predict_fn=best_bayes_Upsampling_model.predict_proba)
+
+exp.save_to_file('best_bayes_Upsampling_500_LIME.html')
+
+###############################################################################
 ################# light GBM using GBDT HPO for Upsampling Set #################
 ############################# 300 Trials ######################################
 ###############################################################################
@@ -902,6 +1099,69 @@ plt.tight_layout()
 plt.show()
 
 ###############################################################################
+# Model metrics with Eli5
+# Compute permutation feature importance
+perm_importance = PermutationImportance(best_bayes_Upsampling_model,
+                                        random_state=seed_value).fit(X_test,
+                                                                     y_test)
+
+# Store feature weights in an object
+html_obj = eli.show_weights(perm_importance,
+                            feature_names = X.columns.tolist())
+
+# Write feature weights html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_GBDT_300_WeightsFeatures.htm',
+          'wb') as f:
+    f.write(html_obj.data.encode("UTF-8"))
+
+# Open the stored feature weights HTML file
+url = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_GBDT_300_WeightsFeatures.htm'
+webbrowser.open(url, new=2)
+
+
+# Explain weights
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X.columns.tolist())
+exp = format_as_dataframe(explanation)
+
+# Write processed data to csv
+exp.to_csv('loanStatus_NonLinear_best_bayes_Upsampling_GBDT_300_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
+
+# Show prediction
+html_obj2 = show_prediction(best_bayes_Upsampling_model, X.iloc[1],
+                            show_feature_values=True)
+
+# Write show prediction html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_GBDT_300_Prediction.htm',
+          'wb') as f:
+    f.write(html_obj2.data.encode("UTF-8"))
+
+# Open the show prediction stored HTML file
+url2 = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_Upsampling_GBDT_300_Prediction.htm'
+webbrowser.open(url2, new=2)
+
+# Explain prediction
+#explanation_pred = eli.explain_prediction(best_bayes_Upsampling_model, np.array(X_test)[1])
+#explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_train),
+    feature_names=X.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+X_test1 = pd.DataFrame(X_test, columns=X.columns)
+
+exp = explainer.explain_instance(
+    data_row=X_test1.iloc[1],
+    predict_fn=best_bayes_Upsampling_model.predict_proba)
+
+exp.save_to_file('best_bayes_Upsampling_GBDT_300_LIME.html')
+
+###############################################################################
 ######################### light GBM HPO for SMOTE Set #########################
 ################################## 300 Trials #################################
 ###############################################################################
@@ -1079,6 +1339,68 @@ for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
         axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
+
+###############################################################################
+# Model metrics with Eli5
+# Compute permutation feature importance
+perm_importance = PermutationImportance(best_bayes_SMOTE_model,
+                                        random_state=seed_value).fit(X1_test,
+                                                                     y1_test)
+
+# Store feature weights in an object
+html_obj = eli.show_weights(perm_importance,
+                            feature_names = X.columns.tolist())
+
+# Write feature weights html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_300_WeightsFeatures.htm',
+          'wb') as f:
+    f.write(html_obj.data.encode("UTF-8"))
+
+# Open the stored feature weights HTML file
+url = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_300_WeightsFeatures.htm'
+webbrowser.open(url, new=2)
+
+# Explain weights
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X.columns.tolist())
+exp = format_as_dataframe(explanation)
+
+# Write processed data to csv
+exp.to_csv('loanStatus_NonLinear_best_bayes_SMOTE_300_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
+
+# Show prediction
+html_obj2 = show_prediction(best_bayes_SMOTE_model, X.iloc[1],
+                            show_feature_values=True)
+
+# Write show prediction html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_300_Prediction.htm',
+          'wb') as f:
+    f.write(html_obj2.data.encode("UTF-8"))
+
+# Open the show prediction stored HTML file
+url2 = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_300_Prediction.htm'
+webbrowser.open(url2, new=2)
+
+# Explain prediction
+#explanation_pred = eli.explain_prediction(best_bayes_SMOTE_model, np.array(X_test)[1])
+#explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X1_train),
+    feature_names=X.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+X1_test1 = pd.DataFrame(X1_test, columns=X.columns)
+
+exp = explainer.explain_instance(
+    data_row=X1_test1.iloc[1],
+    predict_fn=best_bayes_SMOTE_model.predict_proba)
+
+exp.save_to_file('best_bayes_SMOTE_300_LIME.html')
 
 ###############################################################################
 ######################### light GBM HPO for SMOTE Set #########################
@@ -1261,6 +1583,68 @@ plt.tight_layout()
 plt.show()
 
 ###############################################################################
+# Model metrics with Eli5
+# Compute permutation feature importance
+perm_importance = PermutationImportance(best_bayes_SMOTE_model,
+                                        random_state=seed_value).fit(X1_test,
+                                                                     y1_test)
+
+# Store feature weights in an object
+html_obj = eli.show_weights(perm_importance,
+                            feature_names = X.columns.tolist())
+
+# Write feature weights html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_500_WeightsFeatures.htm',
+          'wb') as f:
+    f.write(html_obj.data.encode("UTF-8"))
+
+# Open the stored feature weights HTML file
+url = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_500_WeightsFeatures.htm'
+webbrowser.open(url, new=2)
+
+# Explain weights
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X.columns.tolist())
+exp = format_as_dataframe(explanation)
+
+# Write processed data to csv
+exp.to_csv('loanStatus_NonLinear_best_bayes_SMOTE_500_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
+
+# Show prediction
+html_obj2 = show_prediction(best_bayes_SMOTE_model, X.iloc[1],
+                            show_feature_values=True)
+
+# Write show prediction html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_500_Prediction.htm',
+          'wb') as f:
+    f.write(html_obj2.data.encode("UTF-8"))
+
+# Open the show prediction stored HTML file
+url2 = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_500_Prediction.htm'
+webbrowser.open(url2, new=2)
+
+# Explain prediction
+#explanation_pred = eli.explain_prediction(best_bayes_SMOTE_model, np.array(X_test)[1])
+#explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X1_train),
+    feature_names=X.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+X1_test1 = pd.DataFrame(X1_test, columns=X.columns)
+
+exp = explainer.explain_instance(
+    data_row=X1_test1.iloc[1],
+    predict_fn=best_bayes_SMOTE_model.predict_proba)
+
+exp.save_to_file('best_bayes_SMOTE_500_LIME.html')
+
+###############################################################################
 ######################### light GBM HPO for SMOTE Set #########################
 ################################## GOSS & DART ################################
 ################################# 500 Trials ##################################
@@ -1439,4 +1823,65 @@ for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
         axs[i].set(xlabel = 'Iteration', ylabel = '{}'.format(hpo), title = '{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
+###############################################################################
+# Model metrics with Eli5
+# Compute permutation feature importance
+perm_importance = PermutationImportance(best_bayes_SMOTE_model,
+                                        random_state=seed_value).fit(X1_test,
+                                                                     y1_test)
+
+# Store feature weights in an object
+html_obj = eli.show_weights(perm_importance,
+                            feature_names = X.columns.tolist())
+
+# Write feature weights html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_500_2_WeightsFeatures.htm',
+          'wb') as f:
+    f.write(html_obj.data.encode("UTF-8"))
+
+# Open the stored feature weights HTML file
+url = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_500_2_WeightsFeatures.htm'
+webbrowser.open(url, new=2)
+
+# Explain weights
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X.columns.tolist())
+exp = format_as_dataframe(explanation)
+
+# Write processed data to csv
+exp.to_csv('loanStatus_NonLinear_best_bayes_SMOTE_500_2_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
+
+# Show prediction
+html_obj2 = show_prediction(best_bayes_SMOTE_model, X.iloc[1],
+                            show_feature_values=True)
+
+# Write show prediction html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_500_2_Prediction.htm',
+          'wb') as f:
+    f.write(html_obj2.data.encode("UTF-8"))
+
+# Open the show prediction stored HTML file
+url2 = r'D:\Loan-Status\Python\ML_Results\NonLinear\lightGBM\best_bayes_SMOTE_500_2_Prediction.htm'
+webbrowser.open(url2, new=2)
+
+# Explain prediction
+#explanation_pred = eli.explain_prediction(best_bayes_SMOTE_model, np.array(X_test)[1])
+#explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X1_train),
+    feature_names=X.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+X1_test1 = pd.DataFrame(X1_test, columns=X.columns)
+
+exp = explainer.explain_instance(
+    data_row=X1_test1.iloc[1],
+    predict_fn=best_bayes_SMOTE_model.predict_proba)
+
+exp.save_to_file('best_bayes_SMOTE_500_2_LIME.html')
 ###############################################################################

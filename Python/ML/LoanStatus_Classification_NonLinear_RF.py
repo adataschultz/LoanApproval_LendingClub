@@ -26,6 +26,15 @@ from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
+import eli5 as eli
+from eli5.sklearn import PermutationImportance 
+from eli5 import show_weights
+import webbrowser
+from eli5.sklearn import explain_weights_sklearn
+from eli5.formatters import format_as_dataframe, format_as_dataframes
+from eli5 import show_prediction
+import lime
+from lime import lime_tabular
 
 path = r'D:\Loan-Status\Data'
 os.chdir(path)
@@ -105,7 +114,7 @@ print(y1_train.value_counts())
 print('======================================================================')
 
 # Change path to Results from Machine Learning
-path = r'D:\Loan-Status\Python\ML_Results\RF'
+path = r'D:\Loan-Status\Python\ML_Results\NonLinear\RF'
 os.chdir(path)
 
 ###############################################################################
@@ -214,25 +223,31 @@ print('Upsampling RF HPO - best parameters')
 print(grid_search_US.best_params_)
 
 # Use best model from grid search to see feature importance
-rf_US_best = RandomForestClassifier(**grid_search_US.best_params)
+rf_US_HPO = grid_search_US.best_estimator_
 
 # Fit the results from grid search to the data
 print('Start fit the best hyperparameters from Upsampling grid search to the data..')
 search_time_start = time.time()
-with parallel_backend('threading', n_jobs=-1):
-    rf_US_best.fit(X_train, y_train)
+with parallel_backend('threading', n_jobs=-2):
+    rf_US_HPO.fit(X_train, y_train)
 print('Finished fit the best hyperparameters from Upsampling grid search to the data :',
       time.time() - search_time_start)
 print('======================================================================')
     
 # Save model
-Pkl_Filename = 'LoanStatus_RF_Upsampling_Best.pkl' 
+Pkl_Filename = 'LoanStatus_RF_UpsamplingHPO_gridSearch.pkl' 
 
 with open(Pkl_Filename, 'wb') as file:  
-    pickle.dump(rf_US_best, file)
+    pickle.dump(rf_US_HPO, file)
+
+# =============================================================================
+# # To load saved model
+#rf_US_HPO = joblib.load('LoanStatus_RF_UpsamplingHPO_gridSearch.pkl')
+#print(rf_US_HPO)
+# =============================================================================
     
 # Predict based on training 
-y_pred_US = rf_US_best.predict(X_test)
+y_pred_US = rf_US_HPO.predict(X_test)
 
 print('Results from Random Forest using GridSearchCV on Upsampled Data:')
 print('\n')
@@ -259,26 +274,84 @@ df_rf.to_csv('Upsampling_rf_gridsearchBest_featureimportance.csv', index=False,
              encoding='utf-8-sig')
 
 ###############################################################################
-# Use best model from grid search to compare with SMOTE
-rf_SMOTE = RandomForestClassifier(**grid_search_US.best_params)
+# Model metrics with Eli5
+# Compute permutation feature importance
+perm_importance = PermutationImportance(rf_US_HPO,
+                                        random_state=seed_value).fit(X_test,
+                                                                     y_test)
 
-# Fit the grid search to the data
+# Store feature weights in an object
+html_obj = eli.show_weights(perm_importance,
+                            feature_names = X_test.columns.tolist())
+
+# Write feature weights html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\RF\RF_US_HPO_WeightsFeatures.htm',
+          'wb') as f:
+    f.write(html_obj.data.encode("UTF-8"))
+
+# Open the stored feature weights HTML file
+url = r'D:\Loan-Status\Python\ML_Results\NonLinear\RF\RF_US_HPO_WeightsFeatures.htm'
+webbrowser.open(url, new=2)
+
+# Explain weights
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X_test.columns.tolist())
+exp = format_as_dataframe(explanation)
+
+# Write processed data to csv
+exp.to_csv('loanStatus_NonLinear_RF_US_HPO_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
+
+# Show prediction
+html_obj2 = show_prediction(rf_US_HPO, X_test.iloc[1],
+                            show_feature_values=True)
+
+# Write show prediction html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\RF\RF_US_HPO_Prediction.htm',
+          'wb') as f:
+    f.write(html_obj2.data.encode("UTF-8"))
+
+# Open the show prediction stored HTML file
+url2 = r'D:\Loan-Status\Python\ML_Results\NonLinear\RF\RF_US_HPO_Prediction.htm'
+webbrowser.open(url2, new=2)
+
+# Explain prediction
+#explanation_pred = eli.explain_prediction(rf_US_HPO, np.array(X_test)[1])
+#explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_train),
+    feature_names=X_train.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X_test.iloc[1], 
+    predict_fn=rf_US_HPO.predict_proba)
+
+exp.save_to_file('RF_US_HPO_LIME.html')
+
+###############################################################################
+###############################################################################
+# Use best model from grid search to compare with SMOTE
 print('Start Fit best model using gridsearch results on Upsamplimg to SMOTE data..')
 search_time_start = time.time()
 with parallel_backend('threading', n_jobs=-1):
-    rf_SMOTE.fit(X1_train, y1_train)
+    rf_US_HPO.fit(X1_train, y1_train)
 print('Finished Fit best model using gridsearch results on Upsamplimg to SMOTE data :',
       time.time() - search_time_start)
 print('======================================================================')
     
 # Save model
-Pkl_Filename = 'LoanStatus_RF_SMOTEusingUpsampling_Best.pkl'
+Pkl_Filename = 'LoanStatus_RF_SMOTEusingUpsamplingHPO_gridSearch.pkl'
 
 with open(Pkl_Filename, 'wb') as file:  
-    pickle.dump(rf_SMOTE, file)
+    pickle.dump(rf_US_HPO, file)
 
 # Predict based on training 
-y_pred_SMOTE_US = rf_SMOTE.predict(X1_test)
+y_pred_SMOTE_US = rf_US_HPO.predict(X1_test)
 
 print('Results from Random Forest using Upsampling Best from GridSearch on SMOTE Data:')
 print('\n')
@@ -301,8 +374,68 @@ for feature in zip(X, rf_SMOTE.feature_importances_):
     
 df_rf = pd.DataFrame(df_rf,columns=['Variable', 'Feature_Importance'])
 df_rf = df_rf.sort_values('Feature_Importance', ascending = False)
-df_rf.to_csv('SMOTEusingUpsampling_rf_gridsearchBest_featureimportance.csv', index=False, 
-             encoding='utf-8-sig')
+df_rf.to_csv('SMOTEusingUpsampling_rf_gridsearchBest_featureimportance.csv',
+             index=False, encoding='utf-8-sig')
+
+###############################################################################
+# Model metrics with Eli5
+# Compute permutation feature importance
+perm_importance = PermutationImportance(rf_US_HPO,
+                                        random_state=seed_value).fit(X1_test,
+                                                                     y1_test)
+
+# Store feature weights in an object
+html_obj = eli.show_weights(perm_importance,
+                            feature_names = X1_test.columns.tolist())
+
+# Write feature weights html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\RF\RF_US_HPO_SMOTE_WeightsFeatures.htm',
+          'wb') as f:
+    f.write(html_obj.data.encode("UTF-8"))
+
+# Open the stored feature weights HTML file
+url = r'D:\Loan-Status\Python\ML_Results\NonLinear\RF\RF_US_HPO_SMOTE_WeightsFeatures.htm'
+webbrowser.open(url, new=2)
+
+# Explain weights
+explanation = eli.explain_weights_sklearn(perm_importance,
+                            feature_names = X1_test.columns.tolist())
+exp = format_as_dataframe(explanation)
+
+# Write processed data to csv
+exp.to_csv('loanStatus_NonLinear_RF_US_HPO_SMOTE_WeightsExplain.csv',
+           index=False, encoding='utf-8-sig')
+
+# Show prediction
+html_obj2 = show_prediction(rf_US_HPO, X1_test.iloc[1],
+                            show_feature_values=True)
+
+# Write show prediction html object to a file 
+with open(r'D:\Loan-Status\Python\ML_Results\NonLinear\RF\RF_US_HPO_SMOTE_Prediction.htm',
+          'wb') as f:
+    f.write(html_obj2.data.encode("UTF-8"))
+
+# Open the show prediction stored HTML file
+url2 = r'D:\Loan-Status\Python\ML_Results\NonLinear\RF\RF_US_HPO_SMOTE_Prediction.htm'
+webbrowser.open(url2, new=2)
+
+# Explain prediction
+#explanation_pred = eli.explain_prediction(rf_US_HPO, np.array(X_test)[1])
+#explanation_pred
+
+###############################################################################
+# LIME for model explanation
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X1_train),
+    feature_names=X1_train.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X1_test.iloc[1], 
+    predict_fn=rf_US_HPO.predict_proba)
+
+exp.save_to_file('RF_US_HPO_SMOTE_LIME.html')
 
 ###############################################################################
 ##########################  SMOTE - Grid Search  ##############################
@@ -329,25 +462,25 @@ print('SMOTE RF HPO - best parameters')
 print(grid_search_SMOTE.best_params_)
 
 # SMOTEe best model from grid search to see feature importance
-rf_SMOTE_best = RandomForestClassifier(**grid_search_SMOTE.best_params)
+rf_SMOTE_HPO = grid_search_SMOTE.best_estimator_
 
 # Fit the results from grid search to the data
 print('Start fit the best hyperparameters from SMOTE grid search to the data..')
 search_time_start = time.time()
 with parallel_backend('threading', n_jobs=-1):
-    rf_SMOTE_best.fit(X1_train, y1_train)
+    rf_SMOTE_HPO.fit(X1_train, y1_train)
 print('Finished fit the best hyperparameters from SMOTE grid search to the data:',
       time.time() - search_time_start)
 print('======================================================================')
     
 # Save model
-Pkl_Filename = 'LoanStatus_RF_SMOTE_Best.pkl' 
+Pkl_Filename = 'LoanStatus_RF_SMOTEHPO_gridSearch.pkl' 
 
 with open(Pkl_Filename, 'wb') as file:  
-    pickle.dump(rf_SMOTE_best, file)
+    pickle.dump(rf_SMOTE_HPO, file)
     
 # Predict based on training 
-y_pred_SMOTE = rf_SMOTE_best.predict(X1_test)
+y_pred_SMOTE = rf_SMOTE_HPO.predict(X1_test)
 
 print('Results from Random Forest using GridSearchCV on SMOTE Data:')
 print('\n')
@@ -375,25 +508,22 @@ df_rf.to_csv('SMOTE_rf_gridsearchBest_featureimportance.csv', index=False,
 
 ###############################################################################
 # Use best model from grid search to compare with US
-rf_US = RandomForestClassifier(**grid_search_SMOTE.best_params)
-
-# Fit the grid search to the data
 print('Start fit best model using gridsearch results on SMOTE to Upsamplimg data..')
 search_time_start = time.time()
 with parallel_backend('threading', n_jobs=-1):
-    rf_US.fit(X_train, y_train)
+    rf_SMOTE_HPO.fit(X_train, y_train)
 print('Finished fit best model using gridsearch results on SMOTE to Upsamplimg data :',
       time.time() - search_time_start)
 print('======================================================================')
     
 # Save model
-Pkl_Filename = 'LoanStatus_RF_UpsamplingUsingSMOTE_Best.pkl'
+Pkl_Filename = 'LoanStatus_RF_UpsamplingUsingSMOTEHPO_gridSearch.pkl'
 
 with open(Pkl_Filename, 'wb') as file:  
-    pickle.dump(rf_US, file)
+    pickle.dump(rf_SMOTE_HPO, file)
 
 # Predict based on training 
-y_pred_US_SMOTE = rf_US.predict(X_test)
+y_pred_US_SMOTE = rf_SMOTE_HPO.predict(X_test)
 
 print('Results from Random Forest using SMOTE Best from GridSearch on Upsampled Data:')
 print('\n')
@@ -416,7 +546,7 @@ for feature in zip(X, rf_US.feature_importances_):
     
 df_rf = pd.DataFrame(df_rf,columns=['Variable', 'Feature_Importance'])
 df_rf = df_rf.sort_values('Feature_Importance', ascending = False)
-df_rf.to_csv('UpsamplingUsingSMOTE_rf_gridsearchBest_featureimportance.csv', index=False, 
-             encoding='utf-8-sig')
+df_rf.to_csv('UpsamplingUsingSMOTE_rf_gridsearchBest_featureimportance.csv',
+             index=False, encoding='utf-8-sig')
 
 ###############################################################################
