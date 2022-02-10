@@ -57,7 +57,6 @@ np.random.seed(seed_value)
 # Read data
 df = pd.read_csv('LendingTree_LoanStatus_final.csv', low_memory=False)
 df = df.drop_duplicates()
-print(df.shape)
 
 ###############################################################################
 ########################## Resampling Techniques ##############################
