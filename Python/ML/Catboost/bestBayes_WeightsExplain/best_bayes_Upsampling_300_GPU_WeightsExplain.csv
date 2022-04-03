@@ -1,0 +1,21 @@
+﻿feature,weight,std
+out_prncp,0.1913927574669401,0.00022159056454784437
+total_pymnt,0.06660485163235622,0.000277687388202166
+last_pymnt_amnt,0.06368351319041879,0.00025235728281908026
+recoveries,0.05962591884348849,0.0001498145319571635
+term_ 60 months,0.03015263380604105,0.00019390337702541348
+installment,0.0212110351397659,0.00014984878898200807
+num_tl_30dpd,0.0,0.0
+num_sats,0.0,0.0
+num_bc_tl,0.0,0.0
+num_bc_sats,0.0,0.0
+inq_last_6mths,0.0,0.0
+delinq_amnt,0.0,0.0
+chargeoff_within_12_mths,0.0,0.0
+bc_open_to_buy,0.0,0.0
+int_rate,0.0,0.0
+tax_liens,0.0,0.0
+annual_inc,0.0,0.0
+collections_12_mths_ex_med,0.0,0.0
+mths_since_recent_bc,0.0,0.0
+num_tl_op_past_12m,0.0,0.0

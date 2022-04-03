@@ -1,0 +1,6 @@
+loss,params,iteration,train_time
+1.9836165775526542,"{'depth': 6, 'iterations': 299, 'l2_leaf_reg': 0.25789918937038864, 'learning_rate': 0.026313867338018344, 'min_data_in_leaf': 14, 'one_hot_max_size': 12, 'scale_pos_weight': 0.4601540416991584}",1,28.889677109999866
+1.9772849350222377,"{'depth': 6, 'iterations': 183, 'l2_leaf_reg': 0.9749292038189025, 'learning_rate': 0.012251326997534732, 'min_data_in_leaf': 12, 'one_hot_max_size': 7, 'scale_pos_weight': 0.4160029192647806}",2,20.287703560999944
+1.9945510386260674,"{'depth': 11, 'iterations': 288, 'l2_leaf_reg': 0.9517116675273959, 'learning_rate': 0.09109269195426406, 'min_data_in_leaf': 9, 'one_hot_max_size': 2, 'scale_pos_weight': 0.8390144719977514}",3,64.44044757400025
+1.9916285604111772,"{'depth': 8, 'iterations': 474, 'l2_leaf_reg': 0.19607563450367504, 'learning_rate': 0.13005650728088047, 'min_data_in_leaf': 14, 'one_hot_max_size': 12, 'scale_pos_weight': 0.4503841871781402}",4,52.55017603000033
+1.9968369070937129,"{'depth': 12, 'iterations': 108, 'l2_leaf_reg': 0.05476501820848731, 'learning_rate': 0.29421724336779975, 'min_data_in_leaf': 8, 'one_hot_max_size': 8, 'scale_pos_weight': 0.8142720284737895}",5,38.91583859599996
