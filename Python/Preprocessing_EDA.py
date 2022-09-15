@@ -12,9 +12,9 @@ import numpy as np
 from numpy import sort
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib import pyplot
+import matplotlib.backends.backend_pdf
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import OneHotEncoder
 from joblib import parallel_backend
 from joblib import Parallel, delayed
@@ -31,12 +31,10 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 from group_lasso.utils import extract_ohe_groups
 import scipy.sparse
 from group_lasso import LogisticGroupLasso
-import matplotlib.backends.backend_pdf
 from pandas_profiling import ProfileReport
 import sweetviz as sv
 
 warnings.filterwarnings('ignore')
-warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 
@@ -73,67 +71,50 @@ print('- 63 columns were removed due to high missingness')
 print('======================================================================')
 
 ###############################################################################
-# Examine Qualitative vars
-df1 = df.select_dtypes(include = 'object')
-print('The selected dataframe has ' + str(df1.shape[1]) +
-       ' columns that are qualitative variables.')
-print('======================================================================')
-
-# Examine missing data of qual vars
-def missing_values_table(df):
-        mis_val = df.isnull().sum()
-        mis_val_percent = 100 * df.isnull().sum() / len(df)
+# Define a function to examine data for data types, percentage missing and unique values
+def data_quality_table(df):
         var_type = df.dtypes
-        mis_val_table = pd.concat([mis_val, mis_val_percent, var_type], axis=1)
+        mis_val_percent = 100 * df.isnull().sum() / len(df)
+        unique_count = df.nunique()
+        mis_val_table = pd.concat([var_type, mis_val_percent, unique_count], axis=1)
         mis_val_table_ren_columns = mis_val_table.rename(
-        columns = {0 : 'Missing Values', 1 : '% of Total Values', 2 : 'Data Type'})
+        columns = {0 : 'Data Type', 1 : 'Percent Missing', 2 : 'Number Unique'})
         mis_val_table_ren_columns = mis_val_table_ren_columns[
-            mis_val_table_ren_columns.iloc[:,1] != 0].sort_values(
-        '% of Total Values', ascending=False).round(1)
-        print ('The selected dataframe has ' + str(df.shape[1]) + ' columns.\n'      
-            "There are " + str(mis_val_table_ren_columns.shape[0]) +
-              ' columns that have missing values.')
+            mis_val_table_ren_columns.iloc[:,1] >= 0].sort_values(
+        'Percent Missing', ascending=False).round(1)
+        print ('- There are ' + str(df.shape[1]) + ' columns.\n')
         return mis_val_table_ren_columns
 
-print('\nMissing Data Report') 
-pd.set_option('display.max_rows', None)
-print(missing_values_table(df1))
-print('======================================================================')
+# Categorical variables
+# Examine dimensionality
+# Drop based on missing and questions
+df1 = df.select_dtypes(include = 'object')
+print('\n              Data Quality: Qualitative Variables')
+print(data_quality_table(df1))
+print('\n')
+print('\nSample observations of qualitative variables:')
+print(df1.head())
+
+df = df.drop(['title', 'last_pymnt_d', 'last_credit_pull_d', 
+              'earliest_cr_line', 'zip_code', 'sub_grade', 'issue_d',
+              'addr_state', 'policy_code'], axis=1)
 
 del df1
 
-# Drop based on missing and research questions
-df = df.drop(['title', 'earliest_cr_line', 'last_pymnt_d',
-              'last_credit_pull_d'], axis=1)
-
-# Generate data quality report
-def data_quality_table(df):
-        mis_val = df.isnull().sum()
-        var_type = df.dtypes
-        unique_count = df.nunique()
-        mis_val_table = pd.concat([mis_val, var_type, unique_count], axis=1)
-        mis_val_table_ren_columns = mis_val_table.rename(
-        columns = {0 : 'Number Missing', 1 : 'Data Type', 2 : 'Number Unique'})
-        mis_val_table_ren_columns = mis_val_table_ren_columns[
-            mis_val_table_ren_columns.iloc[:,1] != 0].sort_values(
-        'Number Missing', ascending=False).round(1)
-        print ('The selected dataframe has ' + str(df.shape[1]) + ' columns.\n')
-        return mis_val_table_ren_columns
-
-pd.set_option('display.max_columns', None)
-print('\nData Quality Report - Initial') 
-print(data_quality_table(df))
-print('======================================================================')
-
-# Drop based on missing and business questions (continued)
-df = df.drop(['zip_code', 'sub_grade', 'issue_d', 'addr_state', 'policy_code'],
-             axis=1)
-
-###############################################################################
+# Quantitative variables
 # Remove rows with any column having NA/null for some important variables for complete cases
-df = df[df.bc_util.notna() & df.percent_bc_gt_75.notna() & df.pct_tl_nvr_dlq.notna() 
-         & df.mths_since_recent_bc.notna() & df.dti.notna()
-         & df.inq_last_6mths.notna() & df.num_rev_accts.notna()]
+df1 = df.select_dtypes(exclude = 'object')
+print('\n              Data Quality: Quantitative Variables')
+print(data_quality_table(df1))
+print('\n')
+print('\nSample observations of quantitative variables:')
+print(df1.head())
+
+df = df[df.bc_util.notna() & df.percent_bc_gt_75.notna() & 
+        df.pct_tl_nvr_dlq.notna() & df.mths_since_recent_bc.notna() 
+        & df.dti.notna() & df.inq_last_6mths.notna() & df.num_rev_accts.notna()]
+
+del df1
 
 print('\nData Quality Report - Complete Cases') 
 print(data_quality_table(df))
@@ -146,7 +127,7 @@ print('======================================================================')
 ###############################################################################
 # Examine dependent variable: Status of Loan
 print('\nExamine Dependent Variable for Classification - Loan Status') 
-print((df[['loan_status']].value_counts() / len(df)) * 100)
+print(df.loan_status.value_counts(normalize=True).mul(100).round(2).astype(str) + '%')
 print('======================================================================')
 
 ###############################################################################
@@ -156,7 +137,6 @@ df = df.copy()
 df['loan_status'] = df['loan_status'].replace(['Fully Paid'], 0)
 df['loan_status'] = df['loan_status'].replace(['In Grace Period'], 0)
 df['loan_status'] = df['loan_status'].replace(['Current'], 0)
-
 df['loan_status'] = df['loan_status'].replace(['Charged Off'], 1)
 df['loan_status'] = df['loan_status'].replace(['Late (31-120 days)'], 1)
 df['loan_status'] = df['loan_status'].replace(['Late (16-30 days)'], 1)
@@ -166,7 +146,7 @@ df['loan_status'] = df['loan_status'].replace(['Default'], 1)
 
 # After recoding into binary, there is clear class imbalance
 print('\nExamine Binary Loan Status for Class Imbalance') 
-print((df[['loan_status']].value_counts() / len(df)) * 100)
+print(df.loan_status.value_counts(normalize=True).mul(100).round(2).astype(str) + '%')
 print('======================================================================')
 
 ###############################################################################
@@ -200,13 +180,15 @@ print('Accuracy: %.3f%%' % (accuracy * 100.0))
 print('======================================================================')
 
 # Xgboost - plot feature importance
-plt.rcParams['figure.figsize'] = (21, 14)
-plt.rcParams.update({'font.size': 7})
+plt.rcParams['figure.figsize'] = (10, 10)
+plt.rcParams.update({'font.size': 8.5})
 ax = plot_importance(model)
 fig = ax.figure
-pyplot.show()
-fig.savefig('xgboost_featureImportance_noVIF_AllData.png')
-#fig.savefig('xgboost_featureImportance_afterVIF_AllData.png')
+plt.tight_layout()
+fig.savefig('xgb_featureImportance_noVIF_AllData.png', dpi=my_dpi*10, 
+            bbox_inches='tight')
+plt.show()
+
 
 # Fit model using each importance as a threshold
 # Run for all features and then repeat for features after VIF to compare (X -> X1)
@@ -273,46 +255,48 @@ selection = SelectFromModel(model, threshold=thresh_goal, prefit=True)
 feature_names = X.columns[selection.get_support(indices=True)]
 print('\nXgboost resulted in ' + str(len(feature_names)) +
        ' features.')
-print('\nFeatures selected using optimal threshold for accuracy from xgboost:')
+print('\nFeatures selected using optimal threshold for accuracy from XGBoost:')
 print(X.columns[selection.get_support()]) 
 
 # Create new feature importance chart
 X = pd.DataFrame(data=X, columns=feature_names)
 
-model = XGBClassifier(eval_metric='logloss', use_label_encoder=False)
+model = XGBClassifier(eval_metric='logloss', 
+                      use_label_encoder=False, 
+                      tree_method='gpu_hist', 
+                      gpu_id=0,
+                      random_state=seed_value)
+model.fit(X, y)
+model.save_model('xgb_featureSelection.model')
 
-# Train the Xgooost classifier
-with parallel_backend('threading', n_jobs=-1):
-    model.fit(X, y)
-
-# Make predictions for test data and evaluate
 y_pred = model.predict(X)
 predictions = [round(value) for value in y_pred]
 accuracy = accuracy_score(y, predictions)
-print('Accuracy: %.3f%%' % (accuracy * 100.0)) # NoVIF: 98.953% vs post VIF: 96.854%
+print('Accuracy: %.3f%%' % (accuracy * 100.0)) 
+print('======================================================================') 
 
+# No VIF
 # Xgboost - plot feature importance
-plt.rcParams['figure.figsize'] = (21, 14)
-plt.rcParams.update({'font.size': 7})
+plt.rcParams['figure.figsize'] = (10, 10)
+plt.rcParams.update({'font.size': 10})
 ax = plot_importance(model)
 fig = ax.figure
-pyplot.show()
-# No VIF
-fig.savefig('xgboost_featureImportance_Thresh_0.0001445.png')
-# Removing variables with VIF
-#fig.savefig('xgboost_featureImportance_Thresh_0.0003267.png')
-print('======================================================================') 
+plt.tight_layout()
+fig.savefig('xgb_featureImportance_Thresh_1.67e-4.png', dpi=my_dpi*10, 
+            bbox_inches='tight')
+plt.show()
 
 # Permutation Based Feature Importance (with scikit-learn)
 perm_importance = permutation_importance(model, X, y)
 
 # Visualize Permutation Based Feature Importance
-plt.rcParams['figure.figsize'] = (21, 14)
-plt.rcParams.update({'font.size': 7})
+plt.rcParams['figure.figsize'] = (10, 10)
+plt.rcParams.update({'font.size': 10})
 sorted_idx = perm_importance.importances_mean.argsort()
 plt.barh(X.columns[sorted_idx], perm_importance.importances_mean[sorted_idx])
-plt.xlabel("Permutation Importance")
-plt.savefig('xgboost_PermutationfeatureImportance_noVIF_bestThresh.png')
+plt.xlabel('Permutation Importance')
+plt.savefig('xgb_PermutationfeatureImportance_noVIF_bestThresh.png')
+plt.show()
 
 ###############################################################################
 # Feature Importance Computed with SHAP Values
@@ -323,7 +307,7 @@ shap_values = explainer.shap_values(X)
 fig = plt.figure()
 plt.rcParams.update({'font.size': 7})
 shap.summary_plot(shap_values, X, show=False)
-fig.savefig('Shap_summary_Xgboost_bestThresh.png', dpi=fig.dpi, 
+fig.savefig('Shap_summary_Xgboost_bestThresh.png', dpi=my_dpi*10, 
             bbox_inches='tight')
 
 ###############################################################################
@@ -359,10 +343,9 @@ def calculate_vif_(X, threshold=5.0):
 # Calculate VIF on numerical data using threshold = 5
 X1 = calculate_vif_(df_num, 5) 
 print('\nNumber of quant features after VIF:', X1.shape[1]) 
-
-print(X1.shape) #(2162365, 32)
+print(X1.shape) 
 print('\nQuant features remaining after VIF:')
-print(X1.columns )
+print(X1.columns)
 print('======================================================================')
 
 # Select qual vars to merge with filtered quant
@@ -379,7 +362,7 @@ df_num = df1.select_dtypes(include = ['float64', 'int64'])
 df_num = df_num.drop(['loan_status'], axis=1)
 num_columns = df_num.columns.tolist()
 
-scaler = StandardScaler()
+scaler = MinMaxScaler()
 scaled = scaler.fit_transform(df_num)
 
 df_cat = df1.select_dtypes(include = 'object')
@@ -397,10 +380,11 @@ print('The groups consist of ' + str(groups) + ' for the group lasso.')
 
 # Generate estimator & train model using GridSearch for iterations & tolerance
 LogisticGroupLasso.LOG_LOSSES = True
+
 # Create parameter grid
-params = {
-    'n_iter': [10000, 15000],
-    'tol': [1e-05, 1e-06, 1e-07]
+params = { 
+    'n_iter': [3000],
+    'tol': [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
     }
 
 grid = GridSearchCV(estimator = LogisticGroupLasso( 
@@ -410,15 +394,10 @@ grid = GridSearchCV(estimator = LogisticGroupLasso(
 
 print('Time for feature selection using GroupLasso GridSearchCV...')
 search_time_start = time.time()
-start_time = datetime.now()
-print('%-20s %s' % ('Start Time', start_time))
 with parallel_backend('threading', n_jobs=-1): 
     grid.fit(X2, y)
-end_time = datetime.now()
-print('Finished feature selection using GroupLasso GridSearchCV in:', time.time() - search_time_start)
-print('%-20s %s' % ('Start Time', start_time))
-print('%-20s %s' % ('End Time', end_time))
-print(str(timedelta(seconds=(end_time-start_time).seconds)))
+print('Finished feature selection using GroupLasso GridSearchCV in:', 
+      time.time() - search_time_start)
 
 print('\nGroup Lasso GridSearchCV Feature selection')
 print('\nBest Estimator:')
@@ -431,42 +410,37 @@ print('\nResults from GridSearch CV:')
 print(grid.cv_results_)
 print('======================================================================') 
 
-# Generate estimator and train it
+# Fit the model using results from grid search
 gl = LogisticGroupLasso(
     groups=groups,
     group_reg=0.05,
-    n_iter=15000,
-    tol=1e-09, 
+    n_iter=3000,
+    tol=0.1, 
     l1_reg=0,
     scale_reg=None,
     supress_warning=True,
     random_state=seed_value,
 )
-# Fit the model using results from grid search
+
 with parallel_backend('threading', n_jobs=-1):
     gl.fit(X2, y)
 
-# Extract results from estimator and compute performance metrics
-pred_y = gl.predict(X1)
-sparsity_mask = gl.sparsity_mask_ #Boolean mask of features used in prediction
+pred_y = gl.predict(X2)
+sparsity_mask = gl.sparsity_mask_ 
 accuracy = (pred_y == y).mean()
 
-# Print results
 print(f'Number of total variables: {len(sparsity_mask)}')
 print(f'Number of chosen variables: {sparsity_mask.sum()}')
 print(f'Accuracy: {accuracy}')
 
-# Convert variable position to series and list to match with location in df
 tdf = pd.Series(list(gl.chosen_groups_)).T
 tdf = tdf.values.tolist()
 
-# Separate input features and target to combine with vars selected by group lasso
-X2 = df.drop('loan_status', axis=1)
+X2 = df1.drop('loan_status', axis=1)
 X2 = X2.iloc[:,tdf]
 variables = X2.columns.tolist()
 print(f'Selected variables from group lasso: {variables}')
 
-# Examine loss
 plt.rcParams['figure.figsize'] = (7, 5)
 plt.rcParams.update({'font.size': 15})
 plt.plot(gl.losses_)
@@ -474,8 +448,11 @@ plt.tight_layout()
 plt.xlabel('Iteration')
 plt.ylabel('Loss')
 plt.title('Group Lasso: Loss over the Number of Iterations')
-plt.savefig('groupLasso_bestModel_loss.png', dpi=my_dpi * 10, bbox_inches='tight')
+plt.savefig('groupLasso_bestModel_3000iterTol1e-1_loss.png', dpi=my_dpi*10, 
+            bbox_inches='tight')
+plt.show()
 # Accuracy from group lasso not comparable to other methods so not using further
+
 del X2, tdf, variables
 
 ###############################################################################
@@ -517,7 +494,7 @@ print('\nNumber of different features: ' + str(len(varDiff_xgb)))
 
 s1 = set(X_xgb_vif)
 varDiff_xgbVIF = [x for x in X_xgb_all if x not in s1]
-print('\nFeatures in xgb_all but not Xgb_VIF: ', varDiff_xgbVIF) 
+print('\nFeatures in xgb_all but not in Xgb_VIF: ', varDiff_xgbVIF) 
 print('Number of different features: ' + str(len(varDiff_xgbVIF)))
 
 varDiff_mvsisAll = [x for x in X_mfs if x not in s]
@@ -534,7 +511,7 @@ print('\nFeatures in xgb_all but not in MV-SIS: ', varDiff_mvsisAll1)
 print('Number of different features: ' + str(len(varDiff_mvsisAll1)))
 
 varDiff_mvsisVIF1 = [x for x in X_xgb_vif if x not in s1]
-print('\nFeatures in xgb_VIF but not MV-SIS: ', varDiff_mvsisVIF1) 
+print('\nFeatures in xgb_VIF but not in MV-SIS: ', varDiff_mvsisVIF1) 
 print('Number of different features: ' + str(len(varDiff_mvsisVIF1)))
 print('======================================================================')
 
@@ -599,7 +576,6 @@ print('======================================================================')
 corr = df_num.corr(method='spearman') 
 
 # Create correlation heatmap of highly correlated features
-my_dpi=96
 fig = plt.figure()
 plt.rcParams['figure.figsize'] = (21, 14)
 plt.rcParams.update({'font.size': 6})
@@ -608,12 +584,12 @@ ax = sns.heatmap(corr[(corr >= 0.7) | (corr <= -0.7)],
             annot=True, annot_kws={'size': 5}, square=True);
 
 plt.title('Correlation Matrix with Spearman rho')
-fig.savefig('EDA_correlationMatrix_spearman.png', dpi=my_dpi * 10,
+fig.savefig('EDA_correlationMatrix_spearman.png', dpi=my_dpi*10,
             bbox_inches='tight')
 
 ###############################################################################
 # Overlaid histograms of quant vars for Loan_status
-pdf = matplotlib.backends.backend_pdf.PdfPages("EDA_Quant_Histograms_output.pdf")
+pdf = matplotlib.backends.backend_pdf.PdfPages('EDA_Quant_Histograms_output.pdf')
 for var in df_num.columns[:]:
   fig = plt.figure(figsize=(8.27, 11.69), dpi=my_dpi * 10)
   sns.histplot(x=var, data=df_num, hue=df.loan_status, kde=True)
@@ -623,15 +599,14 @@ for var in df_num.columns[:]:
 pdf.close()
 
 # Box-and-whisker plots of quant vars for Loan_status
-pdf = matplotlib.backends.backend_pdf.PdfPages("EDA_Quant_Boxplots_output.pdf")
+pdf = matplotlib.backends.backend_pdf.PdfPages('EDA_Quant_Boxplots_output.pdf')
 for var in df_num.columns[:]:
-  fig = plt.figure(figsize=(8.27, 11.69), dpi=my_dpi * 10)
+  fig = plt.figure(figsize=(8.27, 11.69), dpi=my_dpi*10)
   sns.boxplot(x=df.loan_status, y=var, data=df_num)
   fig.set_size_inches(22,14)
   pdf.savefig(fig)
 pdf.close()
 
-###############################################################################
 ###############################################################################    
 # Examine Qualitative vars
 df_cat = df.select_dtypes(include = 'uint8')
@@ -645,7 +620,7 @@ fig, ax = plt.subplots(5, 4, figsize=(11.7, 8.27))
 for variable, subplot in zip(df_cat, ax.flatten()):
     sns.countplot(df_cat[variable], ax=subplot)
 plt.tight_layout()  
-fig.savefig('QualVar_Countplot.png', dpi=my_dpi * 10, bbox_inches='tight')
+fig.savefig('QualVar_Countplot.png', dpi=my_dpi*10, bbox_inches='tight')
 
 ###############################################################################
 # Automated EDA with Sweetviz after cleaning
@@ -658,10 +633,6 @@ profile = ProfileReport(df, title='Loan Status_EDA')
 profile.to_file(output_file='Loan_Status_EDA.html')
 
 ###############################################################################
-
-
-
-
 
 
 
