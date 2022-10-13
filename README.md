@@ -39,7 +39,8 @@ Models were trained using the following libraries:
 - `XGBoost` 
 - `Catboost` 
 - `Lightgbm` 
-- `RAPIDS`: Logistic/Ridge/Elastic Net Regression, LinearSVC, Random Forest, K Nearest Neighbor
+- `RAPIDS`: Logistic/Ridge/Elastic Net, LinearSVC, Random Forest, XGBoost, K Nearest Neighbor
+- `SparkML`: Logistic Regression, LinearSVC, Decision Trees, Random Forest, Gradient Boosted Trees
 - `Scikit-learn`: Linear, Naive Bayes, Random Forest
 
 
