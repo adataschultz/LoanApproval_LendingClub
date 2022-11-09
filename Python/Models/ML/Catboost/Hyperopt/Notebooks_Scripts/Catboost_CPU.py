@@ -10,43 +10,36 @@
 import os
 import random
 import numpy as np
+import warnings
 import sys
 import pandas as pd
-from hyperopt import STATUS_OK
-from hyperopt import fmin, tpe, Trials, hp
 from sklearn.model_selection import cross_val_score, KFold
+from hyperopt import hp, fmin, tpe, Trials, STATUS_OK
 from catboost import CatBoostClassifier
 import csv
 from datetime import datetime, timedelta
 from timeit import default_timer as timer
 import ast
 import pickle
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import f1_score, roc_auc_score, accuracy_score
+from sklearn.metrics import recall_score, precision_score
+from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
-import eli5 
+import eli5
 from eli5.sklearn import PermutationImportance 
-from eli5 import show_weights
 import webbrowser
-from eli5.sklearn import explain_weights_sklearn
-from eli5.formatters import format_as_dataframe, format_as_dataframes
-from eli5 import show_prediction
+from eli5.formatters import format_as_dataframe
 from lime import lime_tabular
-import warnings
 warnings.filterwarnings('ignore')
+my_dpi = 96
 
 path = r'D:\Loan-Status\Data'
 os.chdir(path)
 
 # Set seed 
 seed_value = 42
-os.environ['LoanStatus_Catboost'] = str(seed_value)
+os.environ['LoanStatus_NonLinear_Catboost'] = str(seed_value)
 random.seed(seed_value)
 np.random.seed(seed_value)
 
@@ -59,14 +52,12 @@ test_SMOTE = pd.read_csv('testDF_SMOTE.csv', low_memory=False)
 # Upsampling - Separate input features and target
 X_train = train_US.drop('loan_status', axis=1)
 y_train = train_US[['loan_status']]
-
 X_test = test_US.drop('loan_status', axis=1)
 y_test = test_US[['loan_status']]
 
 # SMOTE - Separate input features and target
 X1_train = train_SMOTE.drop('loan_status', axis=1)
 y1_train = train_SMOTE[['loan_status']]
-
 X1_test = test_SMOTE.drop('loan_status', axis=1)
 y1_test = test_SMOTE[['loan_status']]
 
@@ -113,10 +104,10 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_US))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_US))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_US))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_US))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_US))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_US))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_US))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_US))
+print('F1 score : %.3f'% f1_score(y_test, y_pred_US))
 
 ###############################################################################
 # Set baseline model for SMOTE
@@ -140,10 +131,10 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE))
-print('Recall score : %.3f'%recall_score(y1_test, y_pred_SMOTE))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE))
+print('Accuracy score : %.3f' % accuracy_score(y1_test, y_pred_SMOTE))
+print('Precision score : %.3f' % precision_score(y1_test, y_pred_SMOTE))
+print('Recall score : %.3f' % recall_score(y1_test, y_pred_SMOTE))
+print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE))
 
 ###############################################################################
 ####################### Catboost HPO for Upsampling Set #######################
@@ -166,8 +157,21 @@ NUM_EVAL = 100
 # Set same k-folds for reproducibility
 kfolds = KFold(n_splits=3, shuffle=True, random_state=seed_value)
 
+# Define parameter grid
+catboost_tune_kwargs= {
+    'iterations': hp.choice('iterations', np.arange(100, 500, dtype=int)),
+    'depth': hp.choice('depth', np.arange(3, 10, dtype=int)),
+    'l2_leaf_reg': hp.uniform('l2_leaf_reg', 1e-2, 1e0), 
+    'learning_rate': hp.uniform('learning_rate', 1e-4, 0.3),                              
+    'min_data_in_leaf': hp.choice('min_data_in_leaf', np.arange(2, 20, 
+                                                                dtype=int)),
+    'one_hot_max_size': hp.choice('one_hot_max_size', np.arange(2, 20, 
+                                                                dtype=int)),  
+    'scale_pos_weight': hp.uniform('scale_pos_weight', 1e-2, 1.0),
+    }
+
 # Define a function for optimization of hyperparameters
-def catboost_hpo(config):
+def catboost_hpo_us(config):
     """Catboost HPO"""
     
     # Keep track of evaluations
@@ -183,10 +187,10 @@ def catboost_hpo(config):
  
     # Define model type
     cat = CatBoostClassifier(
-        random_state=seed_value,
         loss_function='Logloss', 
         eval_metric='AUC',
         early_stopping_rounds=10,
+        random_state=seed_value,
         logging_level='Silent',
         **config)
     
@@ -194,10 +198,10 @@ def catboost_hpo(config):
     start = timer()
     
     # Perform k_folds cross validation to find lower error
-    scores = -cross_val_score(cat, X_train, y_train, 
-                              scoring='roc_auc', cv=kfolds)
-    
+    scores = -cross_val_score(cat, X_train, y_train, scoring='roc_auc', 
+                              cv=kfolds)
     run_time = timer() - start
+    
     # Extract the best score
     best_score = np.max(scores)
     
@@ -211,17 +215,6 @@ def catboost_hpo(config):
     
     return {'loss': loss, 'params': config, 'iteration': ITERATION, 
             'train_time': run_time, 'status': STATUS_OK}    
-
-# Define parameter grid
-catboost_tune_kwargs= {
-    'iterations': hp.choice('iterations', np.arange(100, 500, dtype=int)),
-    'depth': hp.choice('depth', np.arange(3, 10, dtype=int)),
-    'l2_leaf_reg': hp.uniform('l2_leaf_reg', 1e-2, 1e0), 
-    'learning_rate': hp.uniform('learning_rate', 0.0001, 0.3),                              
-    'min_data_in_leaf': hp.choice('min_data_in_leaf', np.arange(2, 20, dtype=int)),
-    'one_hot_max_size': hp.choice('one_hot_max_size', np.arange(2, 20, dtype=int)),  
-    'scale_pos_weight': hp.uniform('scale_pos_weight', 0.01, 1.0),
-    }
 
 # Optimization algorithm
 tpe_algorithm = tpe.suggest
@@ -245,7 +238,7 @@ bayesOpt_Upsampling_trials = Trials()
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
 
-best_param = fmin(catboost_hpo, catboost_tune_kwargs, algo=tpe.suggest,
+best_param = fmin(catboost_hpo_us, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_Upsampling_trials,
                   rstate= np.random.RandomState(42))
 
@@ -318,15 +311,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_Upsampling_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_Upsampling_HPO))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_Upsampling_HPO))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_Upsampling_HPO))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_Upsampling_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_Upsampling_HPO))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_Upsampling_HPO))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_Upsampling_HPO))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_Upsampling_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_Upsampling_model.predict_proba(X_test)[:, 1]
 
-print('The best model from Upsampling Bayes 100 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, preds)))
+print('The best model from Upsampling Bayes 100 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, 
+                                                                                                                                 preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -381,11 +375,12 @@ for i, hpo in enumerate(bayes_params.columns):
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
-                         'one_hot_max_size']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel ='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+                         'one_hot_max_size']): 
+                         # Scatterplot
+                         sns.regplot('iteration', hpo, data=bayes_params, 
+                                     ax=axs[i])
+                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+                                    title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -396,14 +391,11 @@ ax = sns.regplot('iteration', 'l2_leaf_reg', data=bayes_params,
                  label='Bayes Optimization') 
 ax.set(xlabel='Iteration', ylabel='l2_leaf_reg')                 
 plt.tight_layout()
-plt.show()		
+plt.show()
 
 # Set path for ML results
 path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
 os.chdir(path)
-
-X_train1 = pd.DataFrame(X_train, columns=X_train.columns)
-X_test1 = pd.DataFrame(X_test, columns=X_test.columns)
 
 # Model metrics with Eli5
 # Compute permutation feature importance
@@ -413,7 +405,7 @@ perm_importance = PermutationImportance(best_bayes_Upsampling_model,
 
 # Store feature weights in an object
 html_obj = eli5.show_weights(perm_importance,
-                             feature_names=X_test1.columns.tolist())
+                             feature_names=X_test.columns.tolist())
 
 # Write feature weights html object to a file 
 with open(r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_100_WeightsFeatures.htm',
@@ -421,12 +413,12 @@ with open(r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\Catboost\best_bayes_Upsampling_100_WeightsFeatures.htm'
+url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_100_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
 explanation = eli5.explain_weights_sklearn(perm_importance, 
-                                           feature_names=X_test1.columns.tolist())
+                                           feature_names=X_test.columns.tolist())
 exp = format_as_dataframe(explanation)
 
 # Write processed data to csv
@@ -434,6 +426,9 @@ exp.to_csv('best_bayes_Upsampling_100_WeightsExplain.csv', index=False)
 
 ###############################################################################
 # LIME for model explanation
+X_train1 = pd.DataFrame(X_train, columns=X_train.columns)    
+X_test1 = pd.DataFrame(X_test, columns=X_test.columns)                                                                    
+
 explainer = lime_tabular.LimeTabularExplainer(
     training_data=np.array(X_train),
     feature_names=X_train1.columns,
@@ -459,7 +454,7 @@ path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\trialOptions'
 os.chdir(path)
 
 # Define a function for optimization of hyperparameters
-def catboost_hpo(config):
+def catboost_hpo_smote(config):
     """Catboost HPO"""
     
     # Keep track of evaluations
@@ -504,10 +499,6 @@ def catboost_hpo(config):
     return {'loss': loss, 'params': config, 'iteration': ITERATION, 
             'train_time': run_time, 'status': STATUS_OK}    
 
-
-# Optimization algorithm
-tpe_algorithm = tpe.suggest
-
 # File to save first results
 out_file = 'Catboost_HPO_SMOTE_100.csv'
 of_connection = open(out_file, 'w')
@@ -527,7 +518,7 @@ bayesOpt_SMOTE_trials = Trials()
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
 
-best_param = fmin(catboost_hpo, catboost_tune_kwargs, algo=tpe.suggest,
+best_param = fmin(catboost_hpo_smote, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
                   rstate= np.random.RandomState(42))
 
@@ -539,7 +530,7 @@ print(str(timedelta(seconds=(end_time-start_time).seconds)))
 
 # Sort the trials with lowest loss (highest AUC) 
 bayesOpt_SMOTE_trials_results = sorted(bayesOpt_SMOTE_trials.results, 
-                                            key=lambda x: x['loss'])
+                                       key=lambda x: x['loss'])
 print('SMOTE HPO 100 trials: Top two trials with the lowest loss (highest AUC)')
 print(bayesOpt_SMOTE_trials_results[:2])
 
@@ -600,15 +591,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_HPO))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_HPO))
-print('Recall score : %.3f'%recall_score(y1_test,y_pred_SMOTE_HPO))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y1_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f' % precision_score(y1_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f' % recall_score(y1_test,y_pred_SMOTE_HPO))
+print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_SMOTE_model.predict_proba(X1_test)[:, 1]
 
-print('The best model from SMOTE Bayes optimization 100 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
+print('The best model from SMOTE Bayes optimization 100 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, 
+                                                                                                                            preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -652,7 +644,7 @@ for i, hpo in enumerate(bayes_params.columns):
         # Plot the random search distribution and the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
-            plt.legend(loc=0)
+            plt.legend(loc = 0)
             plt.title('{} Distribution'.format(hpo))
             plt.xlabel('{}'.format(hpo)); plt.ylabel('Density')
             plt.tight_layout()
@@ -662,11 +654,12 @@ for i, hpo in enumerate(bayes_params.columns):
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
-                         'one_hot_max_size']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel ='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+                         'one_hot_max_size']): 
+                         # Scatterplot
+                         sns.regplot('iteration', hpo, data=bayes_params, 
+                                     ax=axs[i])
+                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+                                    title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -677,15 +670,15 @@ ax = sns.regplot('iteration', 'l2_leaf_reg', data=bayes_params,
                  label='Bayes Optimization') 
 ax.set(xlabel='Iteration', ylabel='l2_leaf_reg')                 
 plt.tight_layout()
-plt.show()							
+plt.show()
 
 ###############################################################################
 # Set path for ML results
 path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
 os.chdir(path)
 
-X1_train1 = pd.DataFrame(X1_train, columns=X1_train.columns)
-X1_test1 = pd.DataFrame(X1_test, columns=X1_test.columns)
+X1_train1 = pd.DataFrame(X1_train, columns=X1_train.columns)  
+X1_test1 = pd.DataFrame(X1_test, columns=X1_test.columns)  
 
 # Model metrics with Eli5
 # Compute permutation feature importance
@@ -715,7 +708,7 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('best_bayes_SMOTE_100_WeightsExplain.csv', index=False)
 
 ###############################################################################
-# LIME for model explanation
+# LIME for model explanation                                                                  
 explainer = lime_tabular.LimeTabularExplainer(
     training_data=np.array(X1_train),
     feature_names=X1_train1.columns,
@@ -750,14 +743,13 @@ of_connection.close()
 # Set global variable and HPO is run with fmin
 global  ITERATION
 ITERATION = 0
-bayesOpt_Upsampling_trials = Trials()
 
 # Begin HPO trials for Upsampling data
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
 
-best_param = fmin(catboost_hpo, catboost_tune_kwargs, algo=tpe.suggest,
+best_param = fmin(catboost_hpo_us, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_Upsampling_trials,
                   rstate= np.random.RandomState(42))
 
@@ -830,15 +822,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_Upsampling_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_Upsampling_HPO))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_Upsampling_HPO))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_Upsampling_HPO))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_Upsampling_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_Upsampling_HPO))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_Upsampling_HPO))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_Upsampling_HPO))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_Upsampling_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_Upsampling_model.predict_proba(X_test)[:, 1]
 
-print('The best model from Upsampling Bayes 300 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, preds)))
+print('The best model from Upsampling Bayes 300 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, 
+                                                                                                                                 preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -858,7 +851,7 @@ os.chdir(path)
 
 # Save dataframes of parameters
 bayes_params.to_csv('bayes_params_Catboost_HPO_Upsampling_300.csv', 
-                    index = False)
+                    index=False)
 
 # Convert data types for graphing
 bayes_params['depth'] = bayes_params['depth'].astype('float64')
@@ -883,7 +876,7 @@ for i, hpo in enumerate(bayes_params.columns):
         # Plot the random search distribution and the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
-            plt.legend(loc=0)
+            plt.legend(loc = 0)
             plt.title('{} Distribution'.format(hpo))
             plt.xlabel('{}'.format(hpo)); plt.ylabel('Density')
             plt.tight_layout()
@@ -893,11 +886,12 @@ for i, hpo in enumerate(bayes_params.columns):
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
-                         'one_hot_max_size']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel ='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+                         'one_hot_max_size']): 
+                         # Scatterplot
+                         sns.regplot('iteration', hpo, data=bayes_params, 
+                                     ax=axs[i])
+                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+                                    title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -908,7 +902,7 @@ ax = sns.regplot('iteration', 'l2_leaf_reg', data=bayes_params,
                  label='Bayes Optimization') 
 ax.set(xlabel='Iteration', ylabel='l2_leaf_reg')                 
 plt.tight_layout()
-plt.show()							
+plt.show()
 
 ###############################################################################
 # Set path for ML results
@@ -931,11 +925,11 @@ with open(r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\Catboost\best_bayes_Upsampling_300_WeightsFeatures.htm'
+url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_300_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
-explanation = eli5.explain_weights_sklearn(perm_importance, 
+explanation = eli5.explain_weights_sklearn(perm_importance,
                                            feature_names=X_test1.columns.tolist())
 exp = format_as_dataframe(explanation)
 
@@ -943,7 +937,7 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('best_bayes_Upsampling_300_WeightsExplain.csv', index=False)
 
 ###############################################################################
-# LIME for model explanation
+# LIME for model explanation                                                                  
 explainer = lime_tabular.LimeTabularExplainer(
     training_data=np.array(X_train),
     feature_names=X_train1.columns,
@@ -975,14 +969,13 @@ of_connection.close()
 # Set global variable and HPO is run with fmin
 global  ITERATION
 ITERATION = 0
-bayesOpt_SMOTE_trials = Trials()
 
 # Begin HPO trials for Upsampling data
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
 
-best_param = fmin(catboost_hpo, catboost_tune_kwargs, algo=tpe.suggest,
+best_param = fmin(catboost_hpo_smote, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
                   rstate= np.random.RandomState(42))
 
@@ -1055,15 +1048,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_HPO))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_HPO))
-print('Recall score : %.3f'%recall_score(y1_test,y_pred_SMOTE_HPO))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y1_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f' % precision_score(y1_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f' % recall_score(y1_test,y_pred_SMOTE_HPO))
+print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_SMOTE_model.predict_proba(X1_test)[:, 1]
 
-print('The best model from SMOTE Bayes optimization 300 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
+print('The best model from SMOTE Bayes optimization 300 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, 
+                                                                                                                            preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -1107,7 +1101,7 @@ for i, hpo in enumerate(bayes_params.columns):
         # Plot the random search distribution and the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
-            plt.legend(loc=0)
+            plt.legend(loc = 0)
             plt.title('{} Distribution'.format(hpo))
             plt.xlabel('{}'.format(hpo)); plt.ylabel('Density')
             plt.tight_layout()
@@ -1117,11 +1111,12 @@ for i, hpo in enumerate(bayes_params.columns):
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
-                         'one_hot_max_size']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel ='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+                         'one_hot_max_size']): 
+                         # Scatterplot
+                         sns.regplot('iteration', hpo, data=bayes_params, 
+                                     ax=axs[i])
+                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+                                    title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1159,8 +1154,8 @@ url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\bes
 webbrowser.open(url, new=2)
 
 # Explain weights
-explanation = eli5.explain_weights_sklearn(perm_importance, 
-                                           feature_names=X1_test.columns.tolist())
+explanation = eli5.explain_weights_sklearn(perm_importance,
+                                           feature_names=X1_test1.columns.tolist())
 exp = format_as_dataframe(explanation)
 
 # Write processed data to csv
@@ -1202,14 +1197,13 @@ of_connection.close()
 # Set global variable and HPO is run with fmin
 global  ITERATION
 ITERATION = 0
-bayesOpt_Upsampling_trials = Trials()
 
 # Begin HPO trials for Upsampling data
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
 
-best_param = fmin(catboost_hpo, catboost_tune_kwargs, algo=tpe.suggest,
+best_param = fmin(catboost_hpo_us, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_Upsampling_trials,
                   rstate= np.random.RandomState(42))
 
@@ -1282,15 +1276,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_Upsampling_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_Upsampling_HPO))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_Upsampling_HPO))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_Upsampling_HPO))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_Upsampling_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_Upsampling_HPO))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_Upsampling_HPO))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_Upsampling_HPO))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_Upsampling_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_Upsampling_model.predict_proba(X_test)[:, 1]
 
-print('The best model from Upsampling Bayes 500 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, preds)))
+print('The best model from Upsampling Bayes 500 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, 
+                                                                                                                                 preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -1309,7 +1304,8 @@ path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save dataframes of parameters
-bayes_params.to_csv('bayes_params_Catboost_HPO_Upsampling_500.csv', index=False)
+bayes_params.to_csv('bayes_params_Catboost_HPO_Upsampling_500.csv', 
+                    index=False)
 
 # Convert data types for graphing
 bayes_params['depth'] = bayes_params['depth'].astype('float64')
@@ -1334,7 +1330,7 @@ for i, hpo in enumerate(bayes_params.columns):
         # Plot the random search distribution and the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
-            plt.legend(loc=0)
+            plt.legend(loc = 0)
             plt.title('{} Distribution'.format(hpo))
             plt.xlabel('{}'.format(hpo)); plt.ylabel('Density')
             plt.tight_layout()
@@ -1344,11 +1340,12 @@ for i, hpo in enumerate(bayes_params.columns):
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
-                         'one_hot_max_size']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel ='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+                         'one_hot_max_size']): 
+                         # Scatterplot
+                         sns.regplot('iteration', hpo, data=bayes_params, 
+                                     ax=axs[i])
+                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+                                    title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1382,11 +1379,11 @@ with open(r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\Catboost\best_bayes_Upsampling_500_WeightsFeatures.htm'
+url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_500_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
-explanation = eli5.explain_weights_sklearn(perm_importance, 
+explanation = eli5.explain_weights_sklearn(perm_importance,
                                            feature_names=X_test1.columns.tolist())
 exp = format_as_dataframe(explanation)
 
@@ -1394,7 +1391,7 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('best_bayes_Upsampling_500_WeightsExplain.csv', index=False)
 
 ###############################################################################
-# LIME for model explanation                                                               
+# LIME for model explanation                                                                  
 explainer = lime_tabular.LimeTabularExplainer(
     training_data=np.array(X_train),
     feature_names=X_train1.columns,
@@ -1426,14 +1423,13 @@ of_connection.close()
 # Set global variable and HPO is run with fmin
 global  ITERATION
 ITERATION = 0
-bayesOpt_SMOTE_trials = Trials()
 
 # Begin HPO trials for Upsampling data
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
 
-best_param = fmin(catboost_hpo, catboost_tune_kwargs, algo=tpe.suggest,
+best_param = fmin(catboost_hpo_smote, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
                   rstate= np.random.RandomState(42))
 
@@ -1445,7 +1441,7 @@ print(str(timedelta(seconds=(end_time-start_time).seconds)))
 
 # Sort the trials with lowest loss (highest AUC) 
 bayesOpt_SMOTE_trials_results = sorted(bayesOpt_SMOTE_trials.results, 
-                                            key=lambda x: x['loss'])
+                                       key=lambda x: x['loss'])
 print('SMOTE HPO 500 trials: Top two trials with the lowest loss (highest AUC)')
 print(bayesOpt_SMOTE_trials_results[:2])
 
@@ -1506,15 +1502,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_HPO))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_HPO))
-print('Recall score : %.3f'%recall_score(y1_test,y_pred_SMOTE_HPO))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y1_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f' % precision_score(y1_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f' % recall_score(y1_test,y_pred_SMOTE_HPO))
+print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_SMOTE_model.predict_proba(X1_test)[:, 1]
 
-print('The best model from SMOTE Bayes optimization 300 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
+print('The best model from SMOTE Bayes optimization 300 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, 
+                                                                                                                            preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -1543,7 +1540,7 @@ bayes_params['min_data_in_leaf'] = bayes_params['min_data_in_leaf'].astype('floa
 bayes_params['one_hot_max_size'] = bayes_params['one_hot_max_size'].astype('float64')
 
 # Density plots of the learning rate distributions 
-plt.figure(figsize =(20,8))
+plt.figure(figsize=(20,8))
 plt.rcParams['font.size'] = 18
 sns.kdeplot(bayes_params['learning_rate'], label='Bayes Optimization', 
             linewidth=2)
@@ -1558,7 +1555,7 @@ for i, hpo in enumerate(bayes_params.columns):
         # Plot the random search distribution and the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
-            plt.legend(loc=0)
+            plt.legend(loc = 0)
             plt.title('{} Distribution'.format(hpo))
             plt.xlabel('{}'.format(hpo)); plt.ylabel('Density')
             plt.tight_layout()
@@ -1568,11 +1565,12 @@ for i, hpo in enumerate(bayes_params.columns):
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
-                         'one_hot_max_size']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+                         'one_hot_max_size']): 
+                         # Scatterplot
+                         sns.regplot('iteration', hpo, data=bayes_params, 
+                                     ax=axs[i])
+                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+                                    title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1610,7 +1608,7 @@ url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\bes
 webbrowser.open(url, new=2)
 
 # Explain weights
-explanation = eli5.explain_weights_sklearn(perm_importance, 
+explanation = eli5.explain_weights_sklearn(perm_importance,
                                            feature_names=X1_test1.columns.tolist())
 exp = format_as_dataframe(explanation)
 
@@ -1618,7 +1616,7 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('best_bayes_SMOTE_500_WeightsExplain.csv', index=False)
 
 ###############################################################################
-# LIME for model explanation                                                                  
+# LIME for model explanation
 explainer = lime_tabular.LimeTabularExplainer(
     training_data=np.array(X1_train),
     feature_names=X1_train1.columns,

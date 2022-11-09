@@ -10,30 +10,25 @@
 import os
 import random
 import numpy as np
+import warnings
 import pandas as pd
 from joblib import parallel_backend
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 import time
 import pickle
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import recall_score, precision_score
+from sklearn.metrics import classification_report, confusion_matrix
 import eli5 
 from eli5.sklearn import PermutationImportance 
-from eli5 import show_weights
 import webbrowser
-from eli5.sklearn import explain_weights_sklearn
-from eli5.formatters import format_as_dataframe, format_as_dataframes
+from eli5.formatters import format_as_dataframe
 from eli5 import show_prediction
 from lime import lime_tabular
-import warnings
 warnings.filterwarnings('ignore')
 
-path = r'D:\Loan-Status\Data'
+path = r'D:\LoanStatus\Data'
 os.chdir(path)
 
 # Set seed 
@@ -76,7 +71,7 @@ with parallel_backend('threading', n_jobs=-1):
     rf.fit(X_train, y_train)
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_PKL'
 os.chdir(path)
     
 # Save model
@@ -103,10 +98,10 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_US))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_US))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_US))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_US))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_US))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_US))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_US))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_US))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_US))
 
 ###############################################################################
 # Set baseline model for SMOTE
@@ -132,10 +127,10 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE))
-print('Recall score : %.3f'%recall_score(y1_test, y_pred_SMOTE))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE))
+print('Accuracy score : %.3f' % accuracy_score(y1_test, y_pred_SMOTE))
+print('Precision score : %.3f' % precision_score(y1_test, y_pred_SMOTE))
+print('Recall score : %.3f' % recall_score(y1_test, y_pred_SMOTE))
+print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE))
 
 ###############################################################################
 ########################  Upsampling - Grid Search   ##########################
@@ -204,13 +199,13 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_US))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_US))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_US))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_US))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_US))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_US))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_US))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_US))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_US))
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations'
 os.chdir(path)
 
 X_train1 = pd.DataFrame(X_train, columns=X_train.columns)
@@ -237,12 +232,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Show prediction
@@ -250,12 +245,12 @@ html_obj2 = show_prediction(rf_US_HPO, X_test1.iloc[1],
                             show_feature_values=True)
 
 # Write show prediction html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_Prediction.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_Prediction.htm',
           'wb') as f:
     f.write(html_obj2.data.encode('UTF-8'))
 
 # Open the show prediction stored HTML file
-url2 = r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_Prediction.htm'
+url2 = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_Prediction.htm'
 webbrowser.open(url2, new=2)
 
 # Explain weights
@@ -290,7 +285,7 @@ print('Finished Fit best model using gridsearch results on Upsamplimg to SMOTE d
 print('======================================================================')
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_PKL'
 os.chdir(path)
     
 # Save model
@@ -318,7 +313,7 @@ print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_US))
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations'
 os.chdir(path)
 
 X1_train1 = pd.DataFrame(X1_train, columns=X1_train.columns)
@@ -346,12 +341,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X1_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_SMOTE_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_SMOTE_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_SMOTE_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_SMOTE_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Show prediction
@@ -359,12 +354,12 @@ html_obj2 = show_prediction(rf_US_HPO, X1_test1.iloc[1],
                             show_feature_values=True)
 
 # Write show prediction html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_SMOTE_Prediction.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_SMOTE_Prediction.htm',
           'wb') as f:
     f.write(html_obj2.data.encode('UTF-8'))
 
 # Open the show prediction stored HTML file
-url2 = r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_SMOTE_Prediction.htm'
+url2 = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_SMOTE_Prediction.htm'
 webbrowser.open(url2, new=2)
 
 # Explain weights
@@ -432,14 +427,14 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE))
-print('Recall score : %.3f'%recall_score(y1_test, y_pred_SMOTE))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE))
+print('Accuracy score : %.3f' % accuracy_score(y1_test, y_pred_SMOTE))
+print('Precision score : %.3f' % precision_score(y1_test, y_pred_SMOTE))
+print('Recall score : %.3f' % recall_score(y1_test, y_pred_SMOTE))
+print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE))
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations'
 os.chdir(path)
 
 # Print the name and entropy importance of each feature
@@ -462,7 +457,7 @@ print('Finished fit best model using gridsearch results on SMOTE to Upsamplimg d
 print('======================================================================')
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_PKL'
 os.chdir(path)
     
 # Save model
@@ -483,13 +478,13 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_US_SMOTE))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_US_SMOTE))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_US_SMOTE))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_US_SMOTE))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_US_SMOTE))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_US_SMOTE))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_US_SMOTE))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_US_SMOTE))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_US_SMOTE))
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\RF\GridSearchCV\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations'
 os.chdir(path)
 
 # Print the name and entropy importance of each feature

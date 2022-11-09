@@ -5,40 +5,33 @@
 ###############################################################################
 ########################## Lending Tree Loan Status ###########################
 ######################### Classification - Nonlinear ##########################
-###########################  light GBM Methods  ###############################
+############################  lightGBM Methods  ###############################
 ###############################################################################
 import os
 import random
 import numpy as np
+import warnings
 import pandas as pd
-from hyperopt import STATUS_OK
 import lightgbm as lgb
-from hyperopt import hp, fmin, tpe, Trials
+from hyperopt import hp, fmin, tpe, Trials, STATUS_OK
 import csv
 from timeit import default_timer as timer
 import ast
 import pickle
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import f1_score, roc_auc_score, accuracy_score
+from sklearn.metrics import recall_score, precision_score
+from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 import eli5 
 from eli5.sklearn import PermutationImportance 
-from eli5 import show_weights
 import webbrowser
-from eli5.sklearn import explain_weights_sklearn
-from eli5.formatters import format_as_dataframe, format_as_dataframes
+from eli5.formatters import format_as_dataframe
 from eli5 import show_prediction
 from lime import lime_tabular
-import warnings
 warnings.filterwarnings('ignore')
 
-path = r'D:\Loan-Status\Data'
+path = r'D:\LoanStatus\Data'
 os.chdir(path)
 
 # Set seed 
@@ -79,7 +72,7 @@ clf = lgb.LGBMClassifier()
 clf.fit(X_train, y_train)
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
 os.chdir(path)
     
 # Save model
@@ -106,10 +99,10 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_US))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_US))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_US))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_US))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_US))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_US))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_US))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_US))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_US))
 
 ###############################################################################
 # Set baseline model for SMOTE
@@ -140,27 +133,28 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_SMOTE))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_SMOTE))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_SMOTE))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_SMOTE))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_SMOTE))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_SMOTE))
+print('Precision score : %.3f'% precision_score(y_test, y_pred_SMOTE))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_SMOTE))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_SMOTE))
 
 ###############################################################################
 ######################## light GBM HPO for Upsampling Set #####################
 ################################## 100 Trials #################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
 os.chdir(path)
 
 # Create a lgb dataset
 params = {'verbose': -1}
 train_set = lgb.Dataset(X_train, label=y_train, params=params)
 
-# Define an lgb_hpo function
+# Set number of trials and folds
 NUM_EVAL = 100
 N_FOLDS = 3
 
+# Define an lgb_hpo function
 def lgb_hpo(params, n_folds=N_FOLDS):
     """Gradient Boosting Machine Hyperparameter Optimization"""
     
@@ -179,13 +173,12 @@ def lgb_hpo(params, n_folds=N_FOLDS):
     # Make sure parameters that need to be integers are integers
     for param_name in ['max_depth', 'num_leaves']:
         params[param_name] = int(params[param_name])
-        
+
+    # Perform n_folds cross validation        
     start = timer()
-    
-    # Perform n_folds cross validation
-    cv_results = lgb.cv(params, train_set, num_boost_round=100, nfold=N_FOLDS, 
-                        early_stopping_rounds=10, metrics='auc', seed=seed_value)
-    
+    cv_results = lgb.cv(params, train_set, metrics='auc',
+                        nfold=N_FOLDS, num_boost_round=100, 
+                        early_stopping_rounds=10, seed=seed_value)
     run_time = timer() - start
     
     # Extract the best score
@@ -210,12 +203,17 @@ def lgb_hpo(params, n_folds=N_FOLDS):
 # Define the parameter grid
 param_grid = {
     'force_col_wise': hp.choice('force_col_wise', '+'),
-    'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(1)),
+    'learning_rate': hp.loguniform('learning_rate', np.log(1e-2), np.log(1)),
     'max_depth': hp.choice('max_depth', np.arange(5, 6, dtype=int)),
     'num_leaves': hp.choice('num_leaves', np.arange(30, 100, dtype=int)),
-    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 'subsample': hp.uniform('gdbt_subsample', 0.5, 1)}, 
-                                                 {'boosting_type': 'dart', 'subsample': hp.uniform('dart_subsample', 0.5, 1)},
-                                                 {'boosting_type': 'goss', 'subsample': 1.0}]),
+    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 
+                                                  'subsample': hp.uniform('gdbt_subsample', 
+                                                                          0.5, 1)}, 
+                                                 {'boosting_type': 'dart', 
+                                                  'subsample': hp.uniform('dart_subsample', 
+                                                                          0.5, 1)},
+                                                 {'boosting_type': 'goss', 
+                                                  'subsample': 1.0}]),
     'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0),
     'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
     'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
@@ -254,6 +252,7 @@ results = pd.read_csv('lightGBM_HPO_Upsampling_100.csv')
 # Sort best scores
 results.sort_values('loss', ascending=True, inplace=True)
 results.reset_index(inplace=True, drop=True)
+results.to_csv('lightGBM_HPO_Upsampling_100.csv', index=False)
 
 # Convert from a string to a dictionary for later use
 ast.literal_eval(results.loc[0, 'params'])
@@ -264,14 +263,14 @@ best_bayes_estimators = int(results.loc[0, 'estimators'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Use the HPO from best model fit a model
 best_bayes_Upsampling_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators, 
-                                                 n_jobs=-1, 
                                                  lgb_hpo='binary',
                                                  random_state=seed_value,
+                                                 n_jobs=-1, 
                                                  **best_bayes_params)
 
 # Fit the model
@@ -301,15 +300,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_Upsampling_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_Upsampling_HPO))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_Upsampling_HPO))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_Upsampling_HPO))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_Upsampling_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_Upsampling_HPO))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_Upsampling_HPO))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_Upsampling_HPO))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_Upsampling_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_Upsampling_model.predict_proba(X_test)[:, 1]
 
-print('The best model from Upsampling Bayes 100 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, preds)))
+print('The best model from Upsampling Bayes 100 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, 
+                                                                                                                                 preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -332,7 +332,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save parameters to df
@@ -351,7 +351,7 @@ plt.figure(figsize=(20,8))
 plt.rcParams['font.size'] = 18
 sns.kdeplot(bayes_params['learning_rate'], label='Bayes Optimization', 
             linewidth=2)
-plt.legend(loc = 1)
+plt.legend(loc=1)
 plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
 plt.show()
 
@@ -385,7 +385,6 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 
                          'num_leaves']):
-    
         # Scatterplot
         sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
@@ -405,7 +404,7 @@ plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -422,12 +421,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_100_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_100_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_100_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_100_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Show prediction
@@ -435,12 +434,12 @@ html_obj2 = show_prediction(best_bayes_Upsampling_model, X_test1.iloc[1],
                             show_feature_values=True)
 
 # Write show prediction html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_100_Prediction.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_100_Prediction.htm',
           'wb') as f:
     f.write(html_obj2.data.encode('UTF-8'))
 
 # Open the show prediction stored HTML file
-url2 = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_100_Prediction.htm'
+url2 = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_100_Prediction.htm'
 webbrowser.open(url2, new=2)
 
 # Explain weights
@@ -452,7 +451,8 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('best_bayes_Upsampling_100_WeightsExplain.csv', index=False)
 
 ###############################################################################
-# LIME for model explanation
+# LIME for model explanations      
+# Train set                                                          
 explainer = lime_tabular.LimeTabularExplainer(
     training_data=np.array(X_train),
     feature_names=X_train1.columns,
@@ -460,16 +460,28 @@ explainer = lime_tabular.LimeTabularExplainer(
     mode='classification')
 
 exp = explainer.explain_instance(
-    data_row=X_test1.iloc[1],
+    data_row=X_train.iloc[1],
     predict_fn=best_bayes_Upsampling_model.predict_proba)
-exp.save_to_file('best_bayes_Upsampling_100_LIME.html')
+exp.save_to_file('best_bayes_Upsampling_100_LIME_Train.html')
+
+# Test set
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_test),
+    feature_names=X_test1.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X_test.iloc[1],
+    predict_fn=best_bayes_Upsampling_model.predict_proba)
+exp.save_to_file('best_bayes_Upsampling_100_LIME_Test.html')
 
 ###############################################################################
 ######################### light GBM HPO for SMOTE Set #########################
 ################################## 100 Trials #################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
 os.chdir(path)
 
 # Create a lgb dataset
@@ -506,6 +518,7 @@ results = pd.read_csv('lightGBM_HPO_SMOTE_100.csv')
 # Sort best scores
 results.sort_values('loss', ascending=True, inplace=True)
 results.reset_index(inplace=True, drop=True)
+results.to_csv('lightGBM_HPO_SMOTE_100.csv', index=False)
 
 # Convert from a string to a dictionary for later use
 ast.literal_eval(results.loc[0, 'params'])
@@ -516,14 +529,14 @@ best_bayes_estimators = int(results.loc[0, 'estimators'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Use the HPO from best model fit a model
 best_bayes_SMOTE_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators, 
-                                            n_jobs=-1, 
                                             lgb_hpo='binary',
                                             random_state=seed_value,
+                                            n_jobs=-1, 
                                             **best_bayes_params)
 
 # Fit the model
@@ -553,15 +566,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_HPO))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_HPO))
-print('Recall score : %.3f'%recall_score(y1_test,y_pred_SMOTE_HPO))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y1_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f' % precision_score(y1_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f' % recall_score(y1_test,y_pred_SMOTE_HPO))
+print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_SMOTE_model.predict_proba(X1_test)[:, 1]
 
-print('The best model from SMOTE Bayes optimization 100 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
+print('The best model from SMOTE Bayes optimization 100 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, 
+                                                                                                                            preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -584,7 +598,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save parameters to df
@@ -603,7 +617,7 @@ plt.figure(figsize=(20,8))
 plt.rcParams['font.size'] = 18
 sns.kdeplot(bayes_params['learning_rate'], label='Bayes Optimization', 
             linewidth=2)
-plt.legend(loc = 1)
+plt.legend(loc=1)
 plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
 plt.show()
 
@@ -637,7 +651,6 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 
                          'num_leaves']):
-    
         # Scatterplot
         sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
@@ -654,11 +667,10 @@ for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
                    title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
-plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 X1_train1 = pd.DataFrame(X1_train, columns=X1_train.columns)
@@ -675,12 +687,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X1_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_100_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_100_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_100_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_100_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Show prediction
@@ -688,12 +700,12 @@ html_obj2 = show_prediction(best_bayes_SMOTE_model, X1_test1.iloc[1],
                             show_feature_values=True)
 
 # Write show prediction html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_100_Prediction.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_100_Prediction.htm',
           'wb') as f:
     f.write(html_obj2.data.encode('UTF-8'))
 
 # Open the show prediction stored HTML file
-url2 = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_100_Prediction.htm'
+url2 = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_100_Prediction.htm'
 webbrowser.open(url2, new=2)
 
 # Explain weights
@@ -705,42 +717,62 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('best_bayes_SMOTE_100_WeightsExplain.csv', index=False)
 
 ###############################################################################
-# LIME for model explanation
+# LIME for model explanations      
+# Train set                                                          
 explainer = lime_tabular.LimeTabularExplainer(
-    training_data=np.array(X1_train),
-    feature_names=X1_train1.columns,
+    training_data=np.array(X_train),
+    feature_names=X_train1.columns,
     class_names=['current', 'default'],
     mode='classification')
 
 exp = explainer.explain_instance(
-    data_row=X1_test1.iloc[1],
+    data_row=X_train.iloc[1],
     predict_fn=best_bayes_SMOTE_model.predict_proba)
-exp.save_to_file('best_bayes_SMOTE_100_LIME.html')
+exp.save_to_file('best_bayes_SMOTE_100_LIME_Train.html')
+
+# Test set
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_test),
+    feature_names=X_test1.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X_test.iloc[1],
+    predict_fn=best_bayes_SMOTE_model.predict_proba)
+exp.save_to_file('best_bayes_SMOTE_100_LIME_Test.html')
 
 ###############################################################################
-######################## light GBM HPO for Upsampling Set #####################
+######################### lightGBM HPO for Upsampling Set #####################
 ################################# 500 Trials ##################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
 os.chdir(path)
 
 # Create a lgb dataset
 params = {'verbose': -1}
 train_set = lgb.Dataset(X_train, label=y_train, params=params)
 
-# Define an lgb_hpo function
+# Define number of trials
 NUM_EVAL = 500
     
 # Define the parameter grid
 param_grid = {
     'force_col_wise': hp.choice('force_col_wise', '+'),
-    'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(1)),
+    'learning_rate': hp.loguniform('learning_rate', np.log(1e-2), np.log(1)),
     'max_depth': hp.choice('max_depth', np.arange(5, 6, dtype=int)),
     'num_leaves': hp.choice('num_leaves', np.arange(30, 100, dtype=int)),
-    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 'subsample': hp.uniform('gdbt_subsample', 0.5, 1)}, 
-                                                 {'boosting_type': 'dart', 'subsample': hp.uniform('dart_subsample', 0.5, 1)},
-                                                 {'boosting_type': 'goss', 'subsample': 1.0}]),
+    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 
+                                                  'subsample': hp.uniform('gdbt_subsample', 
+                                                                          0.5, 
+                                                                          1)}, 
+                                                 {'boosting_type': 'dart', 
+                                                  'subsample': hp.uniform('dart_subsample', 
+                                                                          0.5, 
+                                                                          1)},
+                                                 {'boosting_type': 'goss', 
+                                                  'subsample': 1.0}]),
     'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0),
     'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
     'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
@@ -779,6 +811,7 @@ results = pd.read_csv('lightGBM_HPO_Upsampling_500.csv')
 # Sort best scores
 results.sort_values('loss', ascending=True, inplace=True)
 results.reset_index(inplace=True, drop=True)
+results.to_csv('lightGBM_HPO_Upsampling_500.csv', index=False)
 
 # Convert from a string to a dictionary for later use
 ast.literal_eval(results.loc[0, 'params'])
@@ -789,14 +822,14 @@ best_bayes_estimators = int(results.loc[0, 'estimators'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Use the HPO from best model fit a model
 best_bayes_Upsampling_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators, 
-                                                 n_jobs=-1, 
                                                  lgb_hpo='binary',
                                                  random_state=seed_value, 
+                                                 n_jobs=-1, 
                                                  **best_bayes_params)
 
 # Fit the model
@@ -826,15 +859,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_Upsampling_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_Upsampling_HPO))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_Upsampling_HPO))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_Upsampling_HPO))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_Upsampling_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_Upsampling_HPO))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_Upsampling_HPO))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_Upsampling_HPO))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_Upsampling_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_Upsampling_model.predict_proba(X_test)[:, 1]
 
-print('The best model from Upsampling Bayes 500 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, preds)))
+print('The best model from Upsampling Bayes 500 trials optimization scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, 
+                                                                                                                                 preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -857,7 +891,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save parameters to df
@@ -874,8 +908,9 @@ print('Upsampling Bayes 500 Trials Optimization boosting type percentages')
 # Density plots of the learning rate distributions 
 plt.figure(figsize=(20,8))
 plt.rcParams['font.size'] = 18
-sns.kdeplot(bayes_params['learning_rate'], label='Bayes Optimization', linewidth=2)
-plt.legend(loc = 1)
+sns.kdeplot(bayes_params['learning_rate'], label='Bayes Optimization', 
+            linewidth=2)
+plt.legend(loc=1)
 plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
 plt.show()
 
@@ -909,7 +944,6 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 
                          'num_leaves']):
-    
         # Scatterplot
         sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
@@ -929,7 +963,7 @@ plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -943,12 +977,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_500_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_500_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_500_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_500_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Show prediction
@@ -956,12 +990,12 @@ html_obj2 = show_prediction(best_bayes_Upsampling_model, X_test1.iloc[1],
                             show_feature_values=True)
 
 # Write show prediction html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_500_Prediction.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_500_Prediction.htm',
           'wb') as f:
     f.write(html_obj2.data.encode('UTF-8'))
 
 # Open the show prediction stored HTML file
-url2 = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_500_Prediction.htm'
+url2 = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_500_Prediction.htm'
 webbrowser.open(url2, new=2)
 
 # Explain weights
@@ -973,7 +1007,8 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('best_bayes_Upsampling_500_WeightsExplain.csv', index=False)
 
 ###############################################################################
-# LIME for model explanation
+# LIME for model explanations      
+# Train set                                                          
 explainer = lime_tabular.LimeTabularExplainer(
     training_data=np.array(X_train),
     feature_names=X_train1.columns,
@@ -981,16 +1016,28 @@ explainer = lime_tabular.LimeTabularExplainer(
     mode='classification')
 
 exp = explainer.explain_instance(
-    data_row=X_test1.iloc[1],
+    data_row=X_train.iloc[1],
     predict_fn=best_bayes_Upsampling_model.predict_proba)
-exp.save_to_file('best_bayes_Upsampling_500_LIME.html')
+exp.save_to_file('best_bayes_Upsampling_500_LIME_Train.html')
+
+# Test set
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_test),
+    feature_names=X_test1.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X_test.iloc[1],
+    predict_fn=best_bayes_Upsampling_model.predict_proba)
+exp.save_to_file('best_bayes_Upsampling_500_LIME_Test.html')
 
 ###############################################################################
-################# light GBM using GBDT HPO for Upsampling Set #################
-############################# 300 Trials ######################################
+################## lightGBM using GBDT HPO for Upsampling Set #################
+################################ 300 Trials ###################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
 os.chdir(path)
 
 # GBDT has lowest loss for Upsampling initial exploration
@@ -998,19 +1045,25 @@ os.chdir(path)
 params = {'verbose': -1}
 train_set = lgb.Dataset(X_train, label=y_train, params=params)
 
+# Define number of trials
 NUM_EVAL = 300
 
 param_grid = {
     'force_col_wise': hp.choice('force_col_wise', '+'),
-    'learning_rate': hp.loguniform('learning_rate', np.log(0.001), np.log(1)),
+    'learning_rate': hp.loguniform('learning_rate', np.log(1e-3), np.log(1)),
     'bagging_fraction': hp.uniform('bagging_fraction', 0.5, 0.8),
     'bagging_frequency': hp.uniform('bagging_frequency', 5, 8),
     'feature_fraction': hp.uniform('feature_fraction', 0.5, 0.8),
-    'min_sum_hessian_in_leaf': hp.choice('min_sum_hessian_in_leaf',  np.arange(0.1, 1, dtype=int)),
+    'min_sum_hessian_in_leaf': hp.choice('min_sum_hessian_in_leaf',  
+                                         np.arange(0.1, 1, dtype=int)),
     'max_depth': hp.choice('max_depth', np.arange(3, 15, dtype=int)),
     'num_leaves': hp.choice('num_leaves', np.arange(30, 200, dtype=int)),
-    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 'subsample': hp.uniform('gdbt_subsample', 0.3, 1)}]),
-    'colsample_bytree': hp.choice('colsample_by_tree', np.arange(1, 7, dtype=int)),
+    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 
+                                                  'subsample': hp.uniform('gdbt_subsample', 
+                                                                          0.3, 
+                                                                          1)}]),
+    'colsample_bytree': hp.choice('colsample_by_tree', np.arange(1, 7, 
+                                                                 dtype=int)),
     'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
     'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
 }
@@ -1048,6 +1101,7 @@ results = pd.read_csv('lightGBM_GBDT_HPO_Upsampling_300.csv')
 # Sort best scores
 results.sort_values('loss', ascending=True, inplace=True)
 results.reset_index(inplace=True, drop=True)
+results.to_csv('lightGBM_GBDT_HPO_Upsampling_300.csv')
 
 # Convert from a string to a dictionary for later use
 ast.literal_eval(results.loc[0, 'params'])
@@ -1058,14 +1112,14 @@ best_bayes_estimators = int(results.loc[0, 'estimators'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Use the HPO from best model fit a model
 best_bayes_Upsampling_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators, 
-                                                 n_jobs=-1, 
                                                  lgb_hpo='binary',
-                                                 random_state=seed_value, 
+                                                 random_state=seed_value,
+                                                 n_jobs=-1, 
                                                  **best_bayes_params)
 
 # Fit the model
@@ -1095,15 +1149,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_Upsampling_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_Upsampling_HPO))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_Upsampling_HPO))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_Upsampling_HPO))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_Upsampling_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_Upsampling_HPO))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_Upsampling_HPO))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_Upsampling_HPO))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_Upsampling_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_Upsampling_model.predict_proba(X_test)[:, 1]
 
-print('The best model from Upsampling GBDT Bayes optimization 300 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, preds)))
+print('The best model from Upsampling GBDT Bayes optimization 300 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y_test, 
+                                                                                                                                      preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -1129,7 +1184,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save parameters to df
@@ -1192,7 +1247,7 @@ plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -1206,12 +1261,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_GBDT_300_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_GBDT_300_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_GBDT_300_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_GBDT_300_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Show prediction
@@ -1219,12 +1274,12 @@ html_obj2 = show_prediction(best_bayes_Upsampling_model, X_test1.iloc[1],
                             show_feature_values=True)
 
 # Write show prediction html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_GBDT_300_Prediction.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_GBDT_300_Prediction.htm',
           'wb') as f:
     f.write(html_obj2.data.encode('UTF-8'))
 
 # Open the show prediction stored HTML file
-url2 = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_Upsampling_GBDT_300_Prediction.htm'
+url2 = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_Upsampling_GBDT_300_Prediction.htm'
 webbrowser.open(url2, new=2)
 
 # Explain weights
@@ -1236,7 +1291,8 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('best_bayes_Upsampling_GBDT_300_WeightsExplain.csv', index=False)
 
 ###############################################################################
-# LIME for model explanation
+# LIME for model explanations      
+# Train set                                                          
 explainer = lime_tabular.LimeTabularExplainer(
     training_data=np.array(X_train),
     feature_names=X_train1.columns,
@@ -1244,33 +1300,53 @@ explainer = lime_tabular.LimeTabularExplainer(
     mode='classification')
 
 exp = explainer.explain_instance(
-    data_row=X_test1.iloc[1],
+    data_row=X_train.iloc[1],
     predict_fn=best_bayes_Upsampling_model.predict_proba)
-exp.save_to_file('best_bayes_Upsampling_GBDT_300_LIME.html')
+exp.save_to_file('best_bayes_Upsampling_GBDT_300_LIME_Train.html')
+
+# Test set
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_test),
+    feature_names=X_test1.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X_test.iloc[1],
+    predict_fn=best_bayes_Upsampling_model.predict_proba)
+exp.save_to_file('best_bayes_Upsampling_GBDT_300_LIME_Test.html')
 
 ###############################################################################
-######################### light GBM HPO for SMOTE Set #########################
+########################## lightGBM HPO for SMOTE Set #########################
 ################################## 300 Trials #################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
 os.chdir(path)
 
 # Create a lgb dataset
 params = {'verbose': -1}
 train_set = lgb.Dataset(X1_train, label=y1_train, params=params)
 
+# Define number of trials
 NUM_EVAL = 300
 
 # Define the parameter grid
 param_grid = {
     'force_col_wise': hp.choice('force_col_wise', '+'),
-    'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(1)),
+    'learning_rate': hp.loguniform('learning_rate', np.log(1e-2), np.log(1)),
     'max_depth': hp.choice('max_depth', np.arange(5, 6, dtype=int)),
     'num_leaves': hp.choice('num_leaves', np.arange(30, 100, dtype=int)),
-    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 'subsample': hp.uniform('gdbt_subsample', 0.5, 1)}, 
-                                                 {'boosting_type': 'dart', 'subsample': hp.uniform('dart_subsample', 0.5, 1)},
-                                                 {'boosting_type': 'goss', 'subsample': 1.0}]),
+    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 
+                                                  'subsample': hp.uniform('gdbt_subsample', 
+                                                                          0.5, 
+                                                                          1)}, 
+                                                 {'boosting_type': 'dart', 
+                                                  'subsample': hp.uniform('dart_subsample', 
+                                                                          0.5, 
+                                                                          1)},
+                                                 {'boosting_type': 'goss', 
+                                                  'subsample': 1.0}]),
     'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0),
     'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
     'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
@@ -1305,6 +1381,7 @@ results = pd.read_csv('lightGBM_HPO_SMOTE_300.csv')
 # Sort best scores
 results.sort_values('loss', ascending=True, inplace=True)
 results.reset_index(inplace=True, drop=True)
+results.to_csv('lightGBM_HPO_SMOTE_300.csv')
 
 # Convert from a string to a dictionary for later use
 ast.literal_eval(results.loc[0, 'params'])
@@ -1315,14 +1392,14 @@ best_bayes_estimators = int(results.loc[0, 'estimators'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Use the HPO from best model fit a model
 best_bayes_SMOTE_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators, 
-                                            n_jobs=-1, 
                                             lgb_hpo='binary',
                                             random_state=seed_value, 
+                                            n_jobs=-1, 
                                             **best_bayes_params)
 
 # Fit the model
@@ -1352,15 +1429,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_HPO))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_HPO))
-print('Recall score : %.3f'%recall_score(y1_test,y_pred_SMOTE_HPO))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y1_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f' % precision_score(y1_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f' % recall_score(y1_test,y_pred_SMOTE_HPO))
+print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_SMOTE_model.predict_proba(X1_test)[:, 1]
 
-print('The best model from SMOTE Bayes optimization 300 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
+print('The best model from SMOTE Bayes optimization 300 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, 
+                                                                                                                            preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -1383,7 +1461,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save parameters to df
@@ -1436,7 +1514,6 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 
                          'num_leaves']):
-    
         # Scatterplot
         sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
@@ -1456,7 +1533,7 @@ plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -1470,12 +1547,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X1_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_300_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_300_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_300_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_300_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Show prediction
@@ -1483,12 +1560,12 @@ html_obj2 = show_prediction(best_bayes_SMOTE_model, X1_test1.iloc[1],
                             show_feature_values=True)
 
 # Write show prediction html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_300_Prediction.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_300_Prediction.htm',
           'wb') as f:
     f.write(html_obj2.data.encode('UTF-8'))
 
 # Open the show prediction stored HTML file
-url2 = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_300_Prediction.htm'
+url2 = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_300_Prediction.htm'
 webbrowser.open(url2, new=2)
 
 # Explain weights
@@ -1500,44 +1577,66 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('best_bayes_SMOTE_300_WeightsExplain.csv', index=False)
 
 ###############################################################################
-# LIME for model explanation
+# LIME for model explanations      
+# Train set                                                          
 explainer = lime_tabular.LimeTabularExplainer(
-    training_data=np.array(X1_train),
-    feature_names=X1_train1.columns,
+    training_data=np.array(X_train),
+    feature_names=X_train1.columns,
     class_names=['current', 'default'],
     mode='classification')
 
 exp = explainer.explain_instance(
-    data_row=X1_test1.iloc[1],
+    data_row=X_train.iloc[1],
     predict_fn=best_bayes_SMOTE_model.predict_proba)
-exp.save_to_file('best_bayes_SMOTE_300_LIME.html')
+exp.save_to_file('best_bayes_SMOTE_300_LIME_Train.html')
+
+# Test set
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_test),
+    feature_names=X_test1.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X_test.iloc[1],
+    predict_fn=best_bayes_SMOTE_model.predict_proba)
+exp.save_to_file('best_bayes_SMOTE_300_LIME_Test.html')
 
 ###############################################################################
-######################### light GBM HPO for SMOTE Set #########################
+########################## lightGBM HPO for SMOTE Set #########################
 ################################# 500 Trials ##################################
 ###############################################################################
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
 os.chdir(path)
 
 # Create a lgb dataset
 params = {'verbose': -1}
 train_set = lgb.Dataset(X1_train, label=y1_train, params=params)
 
+# Define number of trials
 NUM_EVAL = 500
 
 # Define the parameter grid
 param_grid = {
     'force_col_wise': hp.choice('force_col_wise', '+'),
-    'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(1)),
+    'learning_rate': hp.loguniform('learning_rate', np.log(1e-2), np.log(1)),
     'max_depth': hp.choice('max_depth', np.arange(5, 6, dtype=int)),
     'num_leaves': hp.choice('num_leaves', np.arange(30, 100, dtype=int)),
-    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 'subsample': hp.uniform('gdbt_subsample', 0.5, 1)}, 
-                                                 {'boosting_type': 'dart', 'subsample': hp.uniform('dart_subsample', 0.5, 1)},
-                                                 {'boosting_type': 'goss', 'subsample': 1.0}]),
+    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'gbdt', 
+                                                  'subsample': hp.uniform('gdbt_subsample', 
+                                                                          0.5, 
+                                                                          1)}, 
+                                                 {'boosting_type': 'dart', 
+                                                  'subsample': hp.uniform('dart_subsample', 
+                                                                          0.5, 
+                                                                          1)},
+                                                 {'boosting_type': 'goss', 
+                                                  'subsample': 1.0}]),
     'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0),
     'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
     'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
 }
+
 # File to save results
 out_file = 'lightGBM_HPO_SMOTE_500.csv'
 of_connection = open(out_file, 'w')
@@ -1568,6 +1667,7 @@ results = pd.read_csv('lightGBM_HPO_SMOTE_500.csv')
 # Sort best scores
 results.sort_values('loss', ascending=True, inplace=True)
 results.reset_index(inplace=True, drop=True)
+results.to_csv('lightGBM_HPO_SMOTE_500.csv')
 
 # Convert from a string to a dictionary for later use
 ast.literal_eval(results.loc[0, 'params'])
@@ -1578,14 +1678,14 @@ best_bayes_estimators = int(results.loc[0, 'estimators'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Use the HPO from best model fit a model
 best_bayes_SMOTE_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators, 
-                                            n_jobs=-1, 
                                             lgb_hpo='binary',
                                             random_state=seed_value, 
+                                            n_jobs=-1, 
                                             **best_bayes_params)
 
 # Fit the model
@@ -1615,15 +1715,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_HPO))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_HPO))
-print('Recall score : %.3f'%recall_score(y1_test,y_pred_SMOTE_HPO))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y1_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f' % precision_score(y1_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f' % recall_score(y1_test,y_pred_SMOTE_HPO))
+print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_SMOTE_model.predict_proba(X1_test)[:, 1]
 
-print('The best model from SMOTE Bayes optimization 500 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
+print('The best model from SMOTE Bayes optimization 500 trials scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, 
+                                                                                                                            preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -1646,7 +1747,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save parameters to df
@@ -1665,7 +1766,7 @@ plt.figure(figsize=(20,8))
 plt.rcParams['font.size'] = 18
 sns.kdeplot(bayes_params['learning_rate'], label='Bayes Optimization', 
             linewidth=2)
-plt.legend(loc = 1)
+plt.legend(loc=1)
 plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
 plt.show()
 
@@ -1699,7 +1800,6 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 
                          'num_leaves']):
-    
         # Scatterplot
         sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
@@ -1719,7 +1819,7 @@ plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -1733,12 +1833,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X1_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_500_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_500_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Show prediction
@@ -1746,12 +1846,12 @@ html_obj2 = show_prediction(best_bayes_SMOTE_model, X1_test1.iloc[1],
                             show_feature_values=True)
 
 # Write show prediction html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_500_Prediction.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_Prediction.htm',
           'wb') as f:
     f.write(html_obj2.data.encode('UTF-8'))
 
 # Open the show prediction stored HTML file
-url2 = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_500_Prediction.htm'
+url2 = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_Prediction.htm'
 webbrowser.open(url2, new=2)
 
 # Explain weights
@@ -1763,25 +1863,38 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('best_bayes_SMOTE_500_WeightsExplain.csv', index=False)
 
 ###############################################################################
-# LIME for model explanation
+# LIME for model explanations      
+# Train set                                                          
 explainer = lime_tabular.LimeTabularExplainer(
-    training_data=np.array(X1_train),
-    feature_names=X1_train1.columns,
+    training_data=np.array(X_train),
+    feature_names=X_train1.columns,
     class_names=['current', 'default'],
     mode='classification')
 
 exp = explainer.explain_instance(
-    data_row=X1_test1.iloc[1],
+    data_row=X_train.iloc[1],
     predict_fn=best_bayes_SMOTE_model.predict_proba)
-exp.save_to_file('best_bayes_SMOTE_500_LIME.html')
+exp.save_to_file('best_bayes_SMOTE_500_LIME_Train.html')
+
+# Test set
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_test),
+    feature_names=X_test1.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X_test.iloc[1],
+    predict_fn=best_bayes_SMOTE_model.predict_proba)
+exp.save_to_file('best_bayes_SMOTE_500_LIME_Test.html')
 
 ###############################################################################
-######################### light GBM HPO for SMOTE Set #########################
+########################## lightGBM HPO for SMOTE Set #########################
 ################################## GOSS & DART ################################
 ################################# 500 Trials ##################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\trialOptions'
 os.chdir(path)
 
 # Create a lgb dataset
@@ -1791,12 +1904,17 @@ train_set = lgb.Dataset(X1_train, label=y1_train, params=params)
 # Define the parameter grid
 param_grid = {
     'force_col_wise': hp.choice('force_col_wise', '+'),
-    'learning_rate': hp.loguniform('learning_rate', np.log(0.001), np.log(1)),
+    'learning_rate': hp.loguniform('learning_rate', np.log(1e-3), np.log(1)),
     'max_depth': hp.choice('max_depth', np.arange(3, 10, dtype=int)),
     'num_leaves': hp.choice('num_leaves', np.arange(30, 150, dtype=int)),
-    'min_sum_hessian_in_leaf': hp.choice('min_sum_hessian_in_leaf',  np.arange(0.1, 1, dtype=int)),
-    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'dart', 'subsample': hp.uniform('dart_subsample', 0.5, 1)},
-                                                 {'boosting_type': 'goss', 'subsample': 1.0}]),
+    'min_sum_hessian_in_leaf': hp.choice('min_sum_hessian_in_leaf',  
+                                         np.arange(0.1, 1, dtype=int)),
+    'boosting_type': hp.choice('boosting_type', [{'boosting_type': 'dart', 
+                                                  'subsample': hp.uniform('dart_subsample', 
+                                                                          0.5, 
+                                                                          1)},
+                                                 {'boosting_type': 'goss', 
+                                                  'subsample': 1.0}]),
     'colsample_bytree': hp.uniform('colsample_by_tree', 0.1, 1.0),
     'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
     'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
@@ -1832,6 +1950,7 @@ results = pd.read_csv('lightGBM_HPO_SMOTE_500_2.csv')
 # Sort best scores
 results.sort_values('loss', ascending=True, inplace=True)
 results.reset_index(inplace=True, drop=True)
+results.to_csv('lightGBM_HPO_SMOTE_500_2.csv')
 
 # Convert from a string to a dictionary for later use
 ast.literal_eval(results.loc[0, 'params'])
@@ -1842,14 +1961,14 @@ best_bayes_estimators = int(results.loc[0, 'estimators'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Use the HPO from best model fit a model
 best_bayes_SMOTE_model = lgb.LGBMClassifier(n_estimators=best_bayes_estimators, 
-                                            n_jobs=-1, 
                                             lgb_hpo='binary',
                                             random_state=seed_value, 
+                                            n_jobs=-1, 
                                             **best_bayes_params)
 
 # Fit the model
@@ -1879,15 +1998,16 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE_HPO))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_HPO))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_HPO))
-print('Recall score : %.3f'%recall_score(y1_test,y_pred_SMOTE_HPO))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_HPO))
+print('Accuracy score : %.3f' % accuracy_score(y1_test, y_pred_SMOTE_HPO))
+print('Precision score : %.3f' % precision_score(y1_test, y_pred_SMOTE_HPO))
+print('Recall score : %.3f' % recall_score(y1_test,y_pred_SMOTE_HPO))
+print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE_HPO))
 
 # Evaluate predictive probability on the testing data 
 preds = best_bayes_SMOTE_model.predict_proba(X1_test)[:, 1]
 
-print('The best model from SMOTE Bayes optimization 500 trials GOSS DART scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, preds)))
+print('The best model from SMOTE Bayes optimization 500 trials GOSS DART scores {:.5f} AUC ROC on the test set.'.format(roc_auc_score(y1_test, 
+                                                                                                                                      preds)))
 print('This was achieved after {} search iterations'.format(results.loc[0, 'iteration']))
 
 # Create a new dataframe for storing parameters
@@ -1910,7 +2030,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save parameters to df
@@ -1929,7 +2049,7 @@ plt.figure(figsize=(20,8))
 plt.rcParams['font.size'] = 18
 sns.kdeplot(bayes_params['learning_rate'], label='Bayes Optimization', 
             linewidth=2)
-plt.legend(loc = 1)
+plt.legend(loc=1)
 plt.xlabel('Learning Rate'); plt.ylabel('Density'); plt.title('Learning Rate Distribution');
 plt.show()
 
@@ -1961,7 +2081,6 @@ plt.show()
 fig, axs = plt.subplots(1, 3, figsize =(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'num_leaves']):
-    
         # Scatterplot
         sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
@@ -1981,7 +2100,7 @@ plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -1995,12 +2114,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X1_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_500_2_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_2_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_500_2_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_2_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Show prediction
@@ -2008,12 +2127,12 @@ html_obj2 = show_prediction(best_bayes_SMOTE_model, X1_test1.iloc[1],
                             show_feature_values=True)
 
 # Write show prediction html object to a file 
-with open(r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_500_2_Prediction.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_2_Prediction.htm',
           'wb') as f:
     f.write(html_obj2.data.encode('UTF-8'))
 
 # Open the show prediction stored HTML file
-url2 = r'D:\Loan-Status\Python\lightGBM\Model_Explanations\best_bayes_SMOTE_500_2_Prediction.htm'
+url2 = r'D:\LoanStatus\Python\Models\ML\lightGBM\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_2_Prediction.htm'
 webbrowser.open(url2, new=2)
 
 # Explain weights
@@ -2025,16 +2144,29 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('best_bayes_SMOTE_500_2_WeightsExplain.csv', index=False)
 
 ###############################################################################
-# LIME for model explanation
+# LIME for model explanations      
+# Train set                                                          
 explainer = lime_tabular.LimeTabularExplainer(
-    training_data=np.array(X1_train),
-    feature_names=X1_train1.columns,
+    training_data=np.array(X_train),
+    feature_names=X_train1.columns,
     class_names=['current', 'default'],
     mode='classification')
 
 exp = explainer.explain_instance(
-    data_row=X1_test1.iloc[1],
+    data_row=X_train.iloc[1],
     predict_fn=best_bayes_SMOTE_model.predict_proba)
-exp.save_to_file('best_bayes_SMOTE_500_2_LIME.html')
+exp.save_to_file('best_bayes_SMOTE_500_2_LIME_Train.html')
+
+# Test set
+explainer = lime_tabular.LimeTabularExplainer(
+    training_data=np.array(X_test),
+    feature_names=X_test1.columns,
+    class_names=['current', 'default'],
+    mode='classification')
+
+exp = explainer.explain_instance(
+    data_row=X_test.iloc[1],
+    predict_fn=best_bayes_SMOTE_model.predict_proba)
+exp.save_to_file('best_bayes_SMOTE_500_2_LIME_Test.html')
 
 ###############################################################################

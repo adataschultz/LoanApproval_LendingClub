@@ -15,7 +15,7 @@ from sklearn.linear_model import LogisticRegression
 import time
 
 # Set path
-path = r'D:\Loan-Status\Data'
+path = r'D:\LoanStatus\Data'
 os.chdir(path)
 
 # Set seed 

@@ -17,24 +17,18 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.model_selection import GridSearchCV
 import time
 import pickle
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
-import eli5
+from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import recall_score, precision_score
+from sklearn.metrics import classification_report, confusion_matrix
+import eli5 
 from eli5.sklearn import PermutationImportance 
-from eli5 import show_weights
 import webbrowser
-from eli5.sklearn import explain_weights_sklearn
-from eli5.formatters import format_as_dataframe, format_as_dataframes
-from eli5 import show_prediction
+from eli5.formatters import format_as_dataframe
 from lime import lime_tabular
 import warnings
 warnings.filterwarnings('ignore')
 
-path = r'D:\Loan-Status\Data'
+path = r'D:\LoanStatus\Data'
 os.chdir(path)
 
 # Set seed 
@@ -69,7 +63,7 @@ del train_US, test_US, train_SMOTE, test_SMOTE
 ################################ Baseline #####################################
 ###############################################################################
 # Set path for Models results
-path = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_PKL'
 os.chdir(path)
 
 # Set baseline model for Upsampling
@@ -97,10 +91,10 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_US))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_US))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_US))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_US))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_US))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_US))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_US))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_US))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_US))
 
 ###############################################################################
 # Set baseline model for SMOTE
@@ -126,10 +120,10 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE))
-print('Recall score : %.3f'%recall_score(y1_test, y_pred_SMOTE))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_SMOTE))
+print('Precision score : %.3f'% precision_score(y_test, y_pred_SMOTE))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_SMOTE))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_SMOTE))
 
 ###############################################################################
 ########################  Upsampling - Grid Search   ##########################
@@ -190,14 +184,14 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_US))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_US))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_US))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_US))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_US))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_US))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_US))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_US))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_US))
 
 ###############################################################################
 # Set path for Models results
-path = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -211,12 +205,12 @@ html_obj = eli5.show_weights(perm_importance,
                                  feature_names=X_test.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_US_HPO_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_US_HPO_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights html file
-url = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_US_HPO_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_US_HPO_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
@@ -252,7 +246,7 @@ print('Finished Fit best model using gridsearch results on Upsamplimg to SMOTE d
 print('======================================================================')
 
 # Set path for Models results
-path = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_PKL'
 os.chdir(path)
     
 # Save model
@@ -273,14 +267,14 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE_US))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_US))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_US))
-print('Recall score : %.3f'%recall_score(y1_test, y_pred_SMOTE_US))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_US))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_SMOTE))
+print('Precision score : %.3f'% precision_score(y_test, y_pred_SMOTE))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_SMOTE))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_SMOTE))
 
 ###############################################################################
 # Set path for Models results
-path = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -294,12 +288,12 @@ html_obj = eli5.show_weights(perm_importance,
                                  feature_names=X1_test.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_US_HPO_SMOTE_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_US_HPO_SMOTE_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights html file
-url = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_US_HPO_SMOTE_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_US_HPO_SMOTE_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
@@ -354,7 +348,7 @@ print('Finished fit the best hyperparameters from SMOTE grid search to the data:
 print('======================================================================')
 
 # Set path for Models results
-path = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_PKL'
 os.chdir(path)
     
 # Save model
@@ -375,14 +369,14 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE))
-print('Recall score : %.3f'%recall_score(y1_test, y_pred_SMOTE))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_SMOTE))
+print('Accuracy score : %.3f' % accuracy_score(y_test, y_pred_SMOTE))
+print('Precision score : %.3f'% precision_score(y_test, y_pred_SMOTE))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_SMOTE))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_SMOTE))
 
 ###############################################################################
 # Set path for Models results
-path = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -396,12 +390,12 @@ html_obj = eli5.show_weights(perm_importance,
                                  feature_names=X1_test.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_SMOTE_HPO_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_SMOTE_HPO_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights html file
-url = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_SMOTE_HPO_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_SMOTE_HPO_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
@@ -437,7 +431,7 @@ print('Finished fit best model using gridsearch results on SMOTE to Upsamplimg d
 print('======================================================================')
 
 # Set path for Models results
-path = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_PKL'
 os.chdir(path)
     
 # Save model
@@ -458,14 +452,14 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y_test, y_pred_US_SMOTE))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y_test, y_pred_US_SMOTE))
-print('Precision score : %.3f'%precision_score(y_test, y_pred_US_SMOTE))
-print('Recall score : %.3f'%recall_score(y_test, y_pred_US_SMOTE))
-print('F1 score : %.3f'%f1_score(y_test, y_pred_US_SMOTE))
+print('Accuracy score : %.3f'% accuracy_score(y_test, y_pred_US_SMOTE))
+print('Precision score : %.3f' % precision_score(y_test, y_pred_US_SMOTE))
+print('Recall score : %.3f' % recall_score(y_test, y_pred_US_SMOTE))
+print('F1 score : %.3f' % f1_score(y_test, y_pred_US_SMOTE))
 
 ###############################################################################
 # Set path for Models results
-path = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -479,12 +473,12 @@ html_obj = eli5.show_weights(perm_importance,
                                  feature_names=X_test.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_SMOTE_HPO_US_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_SMOTE_HPO_US_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights html file
-url = r'D:\Loan-Status\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_SMOTE_HPO_US_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\NB\GridSearchCV\Model_Explanations\NB_SMOTE_HPO_US_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
