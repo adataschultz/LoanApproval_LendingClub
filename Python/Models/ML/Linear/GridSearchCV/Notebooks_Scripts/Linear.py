@@ -22,19 +22,13 @@ from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 import time
 import pickle
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import recall_score, precision_score
+from sklearn.metrics import classification_report, confusion_matrix
 import eli5
 from eli5.sklearn import PermutationImportance 
-from eli5 import show_weights
 import webbrowser
-from eli5.sklearn import explain_weights_sklearn
-from eli5.formatters import format_as_dataframe, format_as_dataframes
-from eli5 import show_prediction
+from eli5.formatters import format_as_dataframe
 from lime import lime_tabular
 import warnings
 warnings.filterwarnings('ignore')
@@ -454,8 +448,8 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('LassoMod_US_HPO_WeightsExplain.csv', index=False)
 
 # Show prediction
-html_obj2 = show_prediction(LassoMod_US_HPO, X_test1.iloc[1],
-                            show_feature_values=True)
+html_obj2 = eli5.show_prediction(LassoMod_US_HPO, X_test1.iloc[1],
+                                 show_feature_values=True)
 
 # Write show prediction html object to a file 
 with open('D:\LoanStatus\Python\Models\ML\Linear\GridSearchCV\Model_Explanations\LassoMod_US_HPO_Prediction.htm',
@@ -557,8 +551,8 @@ exp = format_as_dataframe(explanation)
 exp.to_csv('LassoMod_US_HPO_SMOTE_WeightsExplain.csv', index=False)
 
 # Show prediction
-html_obj2 = show_prediction(LassoMod_US_HPO, X1_test1.iloc[1],
-                            show_feature_values=True)
+html_obj2 = eli5.show_prediction(LassoMod_US_HPO, X1_test1.iloc[1],
+                                 show_feature_values=True)
 
 # Write show prediction html object to a file 
 with open('D:\LoanStatus\Python\Models\ML\Linear\GridSearchCV\Model_Explanations\LassoMod_US_HPO_SMOTE_Prediction.htm',

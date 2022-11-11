@@ -24,7 +24,6 @@ import eli5
 from eli5.sklearn import PermutationImportance 
 import webbrowser
 from eli5.formatters import format_as_dataframe
-from eli5 import show_prediction
 from lime import lime_tabular
 warnings.filterwarnings('ignore')
 
@@ -241,8 +240,8 @@ url = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_
 webbrowser.open(url, new=2)
 
 # Show prediction
-html_obj2 = show_prediction(rf_US_HPO, X_test1.iloc[1],
-                            show_feature_values=True)
+html_obj2 = eli5.show_prediction(rf_US_HPO, X_test1.iloc[1],
+                                 show_feature_values=True)
 
 # Write show prediction html object to a file 
 with open(r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_Prediction.htm',
@@ -306,10 +305,10 @@ print('\n')
 print('Confusion matrix:')
 print(confusion_matrix(y1_test, y_pred_SMOTE_US))
 print('\n')
-print('Accuracy score : %.3f'%accuracy_score(y1_test, y_pred_SMOTE_US))
-print('Precision score : %.3f'%precision_score(y1_test, y_pred_SMOTE_US))
-print('Recall score : %.3f'%recall_score(y1_test, y_pred_SMOTE_US))
-print('F1 score : %.3f'%f1_score(y1_test, y_pred_SMOTE_US))
+print('Accuracy score : %.3f' % accuracy_score(y1_test, y_pred_SMOTE_US))
+print('Precision score : %.3f' % precision_score(y1_test, y_pred_SMOTE_US))
+print('Recall score : %.3f' % recall_score(y1_test, y_pred_SMOTE_US))
+print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE_US))
 
 ###############################################################################
 # Set path for ML results
@@ -350,8 +349,8 @@ url = r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_
 webbrowser.open(url, new=2)
 
 # Show prediction
-html_obj2 = show_prediction(rf_US_HPO, X1_test1.iloc[1],
-                            show_feature_values=True)
+html_obj2 = eli5.show_prediction(rf_US_HPO, X1_test1.iloc[1],
+                                 show_feature_values=True)
 
 # Write show prediction html object to a file 
 with open(r'D:\LoanStatus\Python\Models\ML\RF\GridSearchCV\Model_Explanations\RF_US_HPO_SMOTE_Prediction.htm',
