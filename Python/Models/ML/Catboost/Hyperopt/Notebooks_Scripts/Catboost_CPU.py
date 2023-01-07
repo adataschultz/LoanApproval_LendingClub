@@ -34,7 +34,7 @@ from lime import lime_tabular
 warnings.filterwarnings('ignore')
 my_dpi = 96
 
-path = r'D:\Loan-Status\Data'
+path = r'D:\LoanStatus\Data'
 os.chdir(path)
 
 # Set seed 
@@ -77,7 +77,7 @@ cat = CatBoostClassifier(loss_function='Logloss',
 cat.fit(X_train, y_train)
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
 os.chdir(path)
     
 # Save model
@@ -141,7 +141,7 @@ print('F1 score : %.3f' % f1_score(y1_test, y_pred_SMOTE))
 ############################## 100 Trials #####################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\trialOptions'
 os.chdir(path)
 
 # Write results to log file
@@ -167,7 +167,7 @@ catboost_tune_kwargs= {
                                                                 dtype=int)),
     'one_hot_max_size': hp.choice('one_hot_max_size', np.arange(2, 20, 
                                                                 dtype=int)),  
-    'scale_pos_weight': hp.uniform('scale_pos_weight', 1e-2, 1.0),
+    'scale_pos_weight': hp.uniform('scale_pos_weight', 1e-2, 1.0)
     }
 
 # Define a function for optimization of hyperparameters
@@ -237,10 +237,9 @@ bayesOpt_Upsampling_trials = Trials()
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
-
 best_param = fmin(catboost_hpo_us, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_Upsampling_trials,
-                  rstate= np.random.RandomState(42))
+                  rstate=np.random.RandomState(42))
 
 # End timer for experiment
 end_time = datetime.now()
@@ -269,13 +268,13 @@ ast.literal_eval(results.loc[0, 'params'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Re-create the best model and train on the training data
 best_bayes_Upsampling_model = CatBoostClassifier(loss_function='Logloss', 
                                                  eval_metric='AUC',
-                                                 early_stopping_rounds=1000,
+                                                 early_stopping_rounds=10,
                                                  logging_level='Silent', 
                                                  random_state=seed_value,
                                                  **best_bayes_params)
@@ -296,9 +295,6 @@ with open(Pkl_Filename, 'wb') as file:
 # =============================================================================
 
 print('\nModel Metrics for Catboost HPO Upsampling 100trials')
-y_train_pred = best_bayes_Upsampling_model.predict(X_train)
-y_test_pred = best_bayes_Upsampling_model.predict(X_test)
-
 # Predict based on training 
 y_pred_Upsampling_HPO = best_bayes_Upsampling_model.predict(X_test)
 
@@ -335,7 +331,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save dataframes of parameters
@@ -362,7 +358,7 @@ plt.show()
 for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['iteration', 'scale_pos_weight', 'iterations']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc = 0)
@@ -371,16 +367,15 @@ for i, hpo in enumerate(bayes_params.columns):
             plt.tight_layout()
             plt.show()
 
-# Plot quantitive hyperparameters
+# Plot quantitative hyperparameters
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
                          'one_hot_max_size']): 
-                         # Scatterplot
-                         sns.regplot('iteration', hpo, data=bayes_params, 
-                                     ax=axs[i])
-                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                                    title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -394,7 +389,7 @@ plt.tight_layout()
 plt.show()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -408,12 +403,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X_test.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_100_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_100_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_100_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_100_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
@@ -450,7 +445,7 @@ sys.stdout=stdoutOrigin
 ############################## 100 Trials #####################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\trialOptions'
 os.chdir(path)
 
 # Define a function for optimization of hyperparameters
@@ -483,8 +478,8 @@ def catboost_hpo_smote(config):
     # Perform k_folds cross validation to find lower error
     scores = -cross_val_score(cat, X1_train, y1_train, 
                               scoring='roc_auc', cv=kfolds)
-    
     run_time = timer() - start
+    
     # Extract the best score
     best_score = np.max(scores)
     
@@ -517,10 +512,9 @@ bayesOpt_SMOTE_trials = Trials()
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
-
 best_param = fmin(catboost_hpo_smote, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
-                  rstate= np.random.RandomState(42))
+                  rstate=np.random.RandomState(42))
 
 # End timer for experiment
 end_time = datetime.now()
@@ -549,7 +543,7 @@ ast.literal_eval(results.loc[0, 'params'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Re-create the best model and train on the training data
@@ -576,9 +570,6 @@ with open(Pkl_Filename, 'wb') as file:
 # =============================================================================
     
 print('\nModel Metrics for Catboost HPO SMOTE 100trials')
-y_train_pred = best_bayes_SMOTE_model.predict(X1_train)
-y_test_pred = best_bayes_SMOTE_model.predict(X1_test)
-
 # Predict based on training 
 y_pred_SMOTE_HPO = best_bayes_SMOTE_model.predict(X1_test)
 
@@ -615,7 +606,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save dataframes of parameters
@@ -641,7 +632,7 @@ plt.show()
 for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['iteration', 'scale_pos_weight', 'iterations']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc = 0)
@@ -650,16 +641,15 @@ for i, hpo in enumerate(bayes_params.columns):
             plt.tight_layout()
             plt.show()
 
-# Plot quantitive hyperparameters
+# Plot quantitative hyperparameters
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
                          'one_hot_max_size']): 
-                         # Scatterplot
-                         sns.regplot('iteration', hpo, data=bayes_params, 
-                                     ax=axs[i])
-                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                                    title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -674,7 +664,7 @@ plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 X1_train1 = pd.DataFrame(X1_train, columns=X1_train.columns)  
@@ -691,12 +681,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X1_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_100_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_100_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_100_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_100_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
@@ -725,7 +715,7 @@ exp.save_to_file('best_bayes_SMOTE_100_LIME.html')
 ############################## 300 Trials #####################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\trialOptions'
 os.chdir(path)
 
 # Define the number of trials
@@ -748,7 +738,6 @@ ITERATION = 0
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
-
 best_param = fmin(catboost_hpo_us, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_Upsampling_trials,
                   rstate= np.random.RandomState(42))
@@ -780,7 +769,7 @@ ast.literal_eval(results.loc[0, 'params'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Re-create the best model and train on the training data
@@ -807,10 +796,7 @@ with open(Pkl_Filename, 'wb') as file:
 # =============================================================================
 
 print('\nModel Metrics for Catboost HPO Upsampling 300trials')
-y_train_pred = best_bayes_Upsampling_model.predict(X_train)
-y_test_pred = best_bayes_Upsampling_model.predict(X_test)
-
-# Predict based on training 
+# Predict based on training
 y_pred_Upsampling_HPO = best_bayes_Upsampling_model.predict(X_test)
 
 print('Results from Catboost HPO 300 on Upsampling Data:')
@@ -846,7 +832,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save dataframes of parameters
@@ -873,7 +859,7 @@ plt.show()
 for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['iteration', 'scale_pos_weight', 'iterations']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc = 0)
@@ -882,16 +868,15 @@ for i, hpo in enumerate(bayes_params.columns):
             plt.tight_layout()
             plt.show()
 
-# Plot quantitive hyperparameters
+# Plot quantitative hyperparameters
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
                          'one_hot_max_size']): 
-                         # Scatterplot
-                         sns.regplot('iteration', hpo, data=bayes_params, 
-                                     ax=axs[i])
-                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                                    title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -906,7 +891,7 @@ plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -920,12 +905,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_300_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_300_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_300_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_300_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
@@ -954,7 +939,7 @@ exp.save_to_file('best_bayes_Upsampling_300_LIME.html')
 ############################## 300 Trials #####################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\trialOptions'
 os.chdir(path)
 
 # File to save first results
@@ -974,7 +959,6 @@ ITERATION = 0
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
-
 best_param = fmin(catboost_hpo_smote, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
                   rstate= np.random.RandomState(42))
@@ -1006,7 +990,7 @@ ast.literal_eval(results.loc[0, 'params'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Re-create the best model and train on the training data
@@ -1033,9 +1017,6 @@ with open(Pkl_Filename, 'wb') as file:
 # =============================================================================
     
 print('\nModel Metrics for Catboost HPO SMOTE 300trials')
-y_train_pred = best_bayes_SMOTE_model.predict(X1_train)
-y_test_pred = best_bayes_SMOTE_model.predict(X1_test)
-
 # Predict based on training 
 y_pred_SMOTE_HPO = best_bayes_SMOTE_model.predict(X1_test)
 
@@ -1072,7 +1053,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save dataframes of parameters
@@ -1098,7 +1079,7 @@ plt.show()
 for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['iteration', 'scale_pos_weight', 'iterations']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc = 0)
@@ -1107,16 +1088,15 @@ for i, hpo in enumerate(bayes_params.columns):
             plt.tight_layout()
             plt.show()
 
-# Plot quantitive hyperparameters
+# Plot quantitative hyperparameters
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
                          'one_hot_max_size']): 
-                         # Scatterplot
-                         sns.regplot('iteration', hpo, data=bayes_params, 
-                                     ax=axs[i])
-                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                                    title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1131,7 +1111,7 @@ plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -1145,12 +1125,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X1_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_300_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_300_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_300_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_300_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
@@ -1179,7 +1159,7 @@ exp.save_to_file('best_bayes_SMOTE_300_LIME.html')
 ############################## 500 Trials #####################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\trialOptions'
 os.chdir(path)
 
 # Define the number of trials
@@ -1202,7 +1182,6 @@ ITERATION = 0
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
-
 best_param = fmin(catboost_hpo_us, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_Upsampling_trials,
                   rstate= np.random.RandomState(42))
@@ -1234,7 +1213,7 @@ ast.literal_eval(results.loc[0, 'params'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Re-create the best model and train on the training data
@@ -1261,9 +1240,6 @@ with open(Pkl_Filename, 'wb') as file:
 # =============================================================================
 
 print('\nModel Metrics for Catboost HPO Upsampling 500trials')
-y_train_pred = best_bayes_Upsampling_model.predict(X_train)
-y_test_pred = best_bayes_Upsampling_model.predict(X_test)
-
 # Predict based on training 
 y_pred_Upsampling_HPO = best_bayes_Upsampling_model.predict(X_test)
 
@@ -1300,7 +1276,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save dataframes of parameters
@@ -1327,7 +1303,7 @@ plt.show()
 for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['iteration', 'scale_pos_weight', 'iterations']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc = 0)
@@ -1336,16 +1312,15 @@ for i, hpo in enumerate(bayes_params.columns):
             plt.tight_layout()
             plt.show()
 
-# Plot quantitive hyperparameters
+# Plot quantitative hyperparameters
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
                          'one_hot_max_size']): 
-                         # Scatterplot
-                         sns.regplot('iteration', hpo, data=bayes_params, 
-                                     ax=axs[i])
-                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                                    title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1360,7 +1335,7 @@ plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -1374,12 +1349,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_500_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_500_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_500_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_Upsampling_500_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights
@@ -1408,7 +1383,7 @@ exp.save_to_file('best_bayes_Upsampling_500_LIME.html')
 ############################## 500 Trials #####################################
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\trialOptions'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\trialOptions'
 os.chdir(path)
 
 # File to save first results
@@ -1428,7 +1403,6 @@ ITERATION = 0
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
-
 best_param = fmin(catboost_hpo_smote, catboost_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
                   rstate= np.random.RandomState(42))
@@ -1460,7 +1434,7 @@ ast.literal_eval(results.loc[0, 'params'])
 best_bayes_params = ast.literal_eval(results.loc[0, 'params']).copy()
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_PKL'
 os.chdir(path)
 
 # Re-create the best model and train on the training data
@@ -1487,9 +1461,6 @@ with open(Pkl_Filename, 'wb') as file:
 # =============================================================================
     
 print('\nModel Metrics for Catboost HPO SMOTE 500trials')
-y_train_pred = best_bayes_SMOTE_model.predict(X1_train)
-y_test_pred = best_bayes_SMOTE_model.predict(X1_test)
-
 # Predict based on training 
 y_pred_SMOTE_HPO = best_bayes_SMOTE_model.predict(X1_test)
 
@@ -1526,7 +1497,7 @@ bayes_params['loss'] = results['loss']
 bayes_params['iteration'] = results['iteration']
 
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\bayesParams'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\bayesParams'
 os.chdir(path)
 
 # Save dataframes of parameters
@@ -1552,7 +1523,7 @@ plt.show()
 for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['iteration', 'scale_pos_weight', 'iterations']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc = 0)
@@ -1561,16 +1532,15 @@ for i, hpo in enumerate(bayes_params.columns):
             plt.tight_layout()
             plt.show()
 
-# Plot quantitive hyperparameters
+# Plot quantitative hyperparameters
 fig, axs = plt.subplots(1, 3, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'min_data_in_leaf', 
                          'one_hot_max_size']): 
-                         # Scatterplot
-                         sns.regplot('iteration', hpo, data=bayes_params, 
-                                     ax=axs[i])
-                         axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                                    title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1585,7 +1555,7 @@ plt.show()
 
 ###############################################################################
 # Set path for ML results
-path = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
+path = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations'
 os.chdir(path)
 
 # Model metrics with Eli5
@@ -1599,12 +1569,12 @@ html_obj = eli5.show_weights(perm_importance,
                              feature_names=X1_test1.columns.tolist())
 
 # Write feature weights html object to a file 
-with open(r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_WeightsFeatures.htm',
+with open(r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_WeightsFeatures.htm',
           'wb') as f:
     f.write(html_obj.data.encode('UTF-8'))
 
 # Open the stored feature weights HTML file
-url = r'D:\Loan-Status\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_WeightsFeatures.htm'
+url = r'D:\LoanStatus\Python\Models\ML\Catboost\Hyperopt\Model_Explanations\best_bayes_SMOTE_500_WeightsFeatures.htm'
 webbrowser.open(url, new=2)
 
 # Explain weights

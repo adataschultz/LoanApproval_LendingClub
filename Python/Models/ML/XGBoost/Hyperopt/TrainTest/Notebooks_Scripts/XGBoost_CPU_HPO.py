@@ -205,11 +205,8 @@ def xgb_upsampling(config):
     start = timer()
     
     # Perform k_folds cross validation to find lower error
-    scores = -cross_val_score(xgb, 
-                              X_train, 
-                              y_train, 
-                              scoring='roc_auc', 
-                              cv=kfolds)
+    scores = -cross_val_score(xgb,X_train, y_train, 
+                              scoring='roc_auc', cv=kfolds)
     run_time = timer() - start
     
     # Extract the best score
@@ -246,7 +243,6 @@ bayesOpt_Upsampling_trials = Trials()
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
-
 best_param = fmin(xgb_upsampling, xgb_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_Upsampling_trials,
                   rstate= np.random.RandomState(42))
@@ -306,9 +302,6 @@ with open(Pkl_Filename, 'wb') as file:
 # =============================================================================
     
 print('\nModel Metrics for XGBoost HPO Upsampling 100trials')
-y_train_pred = best_bayes_Upsampling_model.predict(X_train)
-y_test_pred = best_bayes_Upsampling_model.predict(X_test)
-
 # Predict based on training 
 y_pred_Upsampling_HPO = best_bayes_Upsampling_model.predict(X_test)
 
@@ -374,7 +367,7 @@ for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['iteration', 'subsample', 'force_col_wise', 
                    'max_depth', 'min_child_weight', 'n_estimators']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc=0)
@@ -388,10 +381,10 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'gamma', 'colsample_bylevel',
                          'colsample_bytree']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -399,9 +392,10 @@ plt.show()
 fig, axs = plt.subplots(1, 2, figsize=(14,6))
 i = 0
 for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -532,7 +526,6 @@ bayesOpt_SMOTE_trials = Trials()
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
-
 best_param = fmin(xgb_smote, xgb_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
                   rstate= np.random.RandomState(42))
@@ -593,9 +586,6 @@ with open(Pkl_Filename, 'wb') as file:
 # =============================================================================
     
 print('\nModel Metrics for XGBoost HPO SMOTE 100trials')
-y_train_pred = best_bayes_SMOTE_model.predict(X1_train)
-y_test_pred = best_bayes_SMOTE_model.predict(X1_test)
-
 # Predict based on training 
 y_pred_SMOTE_HPO = best_bayes_SMOTE_model.predict(X1_test)
 
@@ -661,7 +651,7 @@ for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['iteration', 'subsample', 'force_col_wise', 
                    'max_depth', 'min_child_weight', 'n_estimators']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc=0)
@@ -675,10 +665,10 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'gamma', 'colsample_bylevel',
                          'colsample_bytree']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -686,9 +676,10 @@ plt.show()
 fig, axs = plt.subplots(1, 2, figsize=(14,6))
 i = 0
 for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -768,7 +759,6 @@ bayesOpt_Upsampling_trials = Trials()
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
-
 best_param = fmin(xgb_upsampling, xgb_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_Upsampling_trials,
                   rstate= np.random.RandomState(42))
@@ -829,9 +819,6 @@ with open(Pkl_Filename, 'wb') as file:
 # =============================================================================
     
 print('\nModel Metrics for XGBoost HPO Upsampling 300trials')
-y_train_pred = best_bayes_Upsampling_model.predict(X_train)
-y_test_pred = best_bayes_Upsampling_model.predict(X_test)
-
 # Predict based on training 
 y_pred_Upsampling_HPO = best_bayes_Upsampling_model.predict(X_test)
 
@@ -898,7 +885,7 @@ for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['iteration', 'subsample', 'force_col_wise', 
                    'max_depth', 'min_child_weight', 'n_estimators']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc=0)
@@ -912,10 +899,10 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'gamma', 'colsample_bylevel',
                          'colsample_bytree']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -923,9 +910,10 @@ plt.show()
 fig, axs = plt.subplots(1, 2, figsize=(14,6))
 i = 0
 for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -999,7 +987,6 @@ bayesOpt_SMOTE_trials = Trials()
 # Start timer for experiment
 start_time = datetime.now()
 print('%-20s %s' % ('Start Time', start_time))
-
 best_param = fmin(xgb_smote, xgb_tune_kwargs, algo=tpe.suggest,
                   max_evals=NUM_EVAL, trials=bayesOpt_SMOTE_trials,
                   rstate= np.random.RandomState(42))
@@ -1060,9 +1047,6 @@ with open(Pkl_Filename, 'wb') as file:
 # =============================================================================
     
 print('\nModel Metrics for XGBoost HPO SMOTE 300trials')
-y_train_pred = best_bayes_SMOTE_model.predict(X1_train)
-y_test_pred = best_bayes_SMOTE_model.predict(X1_test)
-
 # Predict based on training 
 y_pred_SMOTE_HPO = best_bayes_SMOTE_model.predict(X1_test)
 
@@ -1129,7 +1113,7 @@ for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['iteration', 'subsample', 'force_col_wise', 
                    'max_depth', 'min_child_weight', 'n_estimators']: 
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc=0)
@@ -1143,10 +1127,10 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['learning_rate', 'gamma', 'colsample_bylevel',
                          'colsample_bytree']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1154,9 +1138,10 @@ plt.show()
 fig, axs = plt.subplots(1, 2, figsize=(14,6))
 i = 0
 for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 

@@ -360,7 +360,7 @@ for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise', 
                    'max_depth', 'min_sum_hessian_in_leaf']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc=0)
@@ -385,10 +385,10 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 
                          'num_leaves']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title ='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -396,9 +396,10 @@ plt.show()
 fig, axs = plt.subplots(1, 2, figsize=(14,6))
 i = 0
 for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -626,7 +627,7 @@ for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise', 
                    'max_depth', 'min_sum_hessian_in_leaf']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc=0)
@@ -651,10 +652,10 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 
                          'num_leaves']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title ='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -662,9 +663,10 @@ plt.show()
 fig, axs = plt.subplots(1, 2, figsize=(14,6))
 i = 0
 for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -919,7 +921,7 @@ for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise', 
                    'max_depth', 'min_sum_hessian_in_leaf']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc=0)
@@ -944,10 +946,10 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 
                          'num_leaves']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title ='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -955,9 +957,10 @@ plt.show()
 fig, axs = plt.subplots(1, 2, figsize=(14,6))
 i = 0
 for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1204,7 +1207,7 @@ for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise', 
                    'max_depth', 'min_sum_hessian_in_leaf']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc=0)
@@ -1228,10 +1231,10 @@ i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'num_leaves',
                          'bagging_fraction', 'bagging_frequency',
                          'feature_fraction']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1239,9 +1242,10 @@ plt.show()
 fig, axs = plt.subplots(1, 2, figsize=(14,6))
 i = 0
 for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1489,7 +1493,7 @@ for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise', 
                    'max_depth', 'min_sum_hessian_in_leaf']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc=0)
@@ -1514,10 +1518,10 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 
                          'num_leaves']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title ='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1525,9 +1529,10 @@ plt.show()
 fig, axs = plt.subplots(1, 2, figsize=(14,6))
 i = 0
 for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1775,7 +1780,7 @@ for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise', 
                    'max_depth', 'min_sum_hessian_in_leaf']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc=0)
@@ -1800,10 +1805,10 @@ fig, axs = plt.subplots(1, 4, figsize=(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'max_depth', 
                          'num_leaves']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title ='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -1811,9 +1816,10 @@ plt.show()
 fig, axs = plt.subplots(1, 2, figsize=(14,6))
 i = 0
 for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -2058,7 +2064,7 @@ for i, hpo in enumerate(bayes_params.columns):
     if hpo not in ['boosting_type', 'iteration', 'subsample', 'force_col_wise', 
                    'max_depth', 'min_sum_hessian_in_leaf']:
         plt.figure(figsize=(14,6))
-        # Plot the random search distribution and the bayes search distribution
+        # Plot the bayes search distribution
         if hpo != 'loss':
             sns.kdeplot(bayes_params[hpo], label='Bayes Optimization')
             plt.legend(loc=0)
@@ -2081,10 +2087,10 @@ plt.show()
 fig, axs = plt.subplots(1, 3, figsize =(20,5))
 i = 0
 for i, hpo in enumerate(['colsample_bytree', 'learning_rate', 'num_leaves']):
-        # Scatterplot
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 
@@ -2092,9 +2098,10 @@ plt.show()
 fig, axs = plt.subplots(1, 2, figsize=(14,6))
 i = 0
 for i, hpo in enumerate(['reg_alpha', 'reg_lambda']):
-        sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
-        axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
-                   title='{} over Trials'.format(hpo))
+  # Scatterplot
+  sns.regplot('iteration', hpo, data=bayes_params, ax=axs[i])
+  axs[i].set(xlabel='Iteration', ylabel='{}'.format(hpo), 
+             title='{} over Trials'.format(hpo))
 plt.tight_layout()
 plt.show()
 

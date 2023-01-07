@@ -5,20 +5,18 @@
 ###############################################################################
 ########################## Lending Tree Loan Status ###########################
 ######################### Classification - Nonlinear ##########################
-############################ Random Forest ####################################
+################################ Random Forest ################################
 ###############################################################################
 import os
 import random
 import numpy as np
 import warnings
 import pandas as pd
-from joblib import parallel_backend
 from sklearn.ensemble import RandomForestClassifier
+from joblib import parallel_backend
 from sklearn.model_selection import GridSearchCV
 import time
-import pickle
-from sklearn.metrics import f1_score, accuracy_score
-from sklearn.metrics import recall_score, precision_score
+from sklearn.metrics import f1_score, accuracy_score, recall_score, precision_score
 from sklearn.metrics import classification_report, confusion_matrix
 import eli5 
 from eli5.sklearn import PermutationImportance 
@@ -27,14 +25,15 @@ from eli5.formatters import format_as_dataframe
 from lime import lime_tabular
 warnings.filterwarnings('ignore')
 
-path = r'D:\LoanStatus\Data'
-os.chdir(path)
-
 # Set seed 
 seed_value = 42
 os.environ['LoanStatus_RF'] = str(seed_value)
 random.seed(seed_value)
 np.random.seed(seed_value)
+
+# Set path
+path = r'D:\LoanStatus\Data'
+os.chdir(path)
 
 # Read data
 train_US = pd.read_csv('trainDF_US.csv', low_memory=False)
@@ -45,14 +44,12 @@ test_SMOTE = pd.read_csv('testDF_SMOTE.csv', low_memory=False)
 # Upsampling - Separate input features and target
 X_train = train_US.drop('loan_status', axis=1)
 y_train = train_US[['loan_status']]
-
 X_test = test_US.drop('loan_status', axis=1)
 y_test = test_US[['loan_status']]
 
 # SMOTE - Separate input features and target
 X1_train = train_SMOTE.drop('loan_status', axis=1)
 y1_train = train_SMOTE[['loan_status']]
-
 X1_test = test_SMOTE.drop('loan_status', axis=1)
 y1_test = test_SMOTE[['loan_status']]
 
