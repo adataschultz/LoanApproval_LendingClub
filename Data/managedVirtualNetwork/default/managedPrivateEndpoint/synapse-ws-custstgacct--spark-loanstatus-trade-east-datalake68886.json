@@ -1,0 +1,10 @@
+{
+	"name": "synapse-ws-custstgacct--spark-loanstatus-trade-east-datalake68886",
+	"properties": {
+		"privateLinkResourceId": "/subscriptions/a134465f-eb15-4297-b902-3c97d4c81838/resourceGroups/aschultzdata/providers/Microsoft.Storage/storageAccounts/datalake68886",
+		"groupId": "dfs",
+		"fqdns": [
+			"datalake68886.dfs.core.windows.net"
+		]
+	}
+}

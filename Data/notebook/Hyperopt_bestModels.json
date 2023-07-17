@@ -1,0 +1,1280 @@
+{
+	"name": "Hyperopt_bestModels",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "e3f71d88-86d7-4f65-a96d-0855a592a56f"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "python"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "xTlApJHhcaXl"
+				},
+				"source": [
+					"# Lending Tree Loan Status - Hyperopt Best Models"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "YVZSGOovcSYV"
+				},
+				"source": [
+					"# Set Up Environment for Spark"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "a14ZKnvXEBZC",
+					"outputId": "4c3546da-3b80-4693-9465-c73b5a150dd2"
+				},
+				"source": [
+					"from google.colab import drive \n",
+					"drive.mount('/content/drive')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "oluXR5BY2OiQ",
+					"outputId": "8d26185f-e4fe-4dd3-a6c2-337f44d612e0"
+				},
+				"source": [
+					"%cd /content/drive/MyDrive/Spark/"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "KEfFnPs42OiR"
+				},
+				"source": [
+					"# Set up environment for Spark\n",
+					"!apt-get install openjdk-8-jdk-headless -qq > /dev/null"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "5zIO9VQ747wm"
+				},
+				"source": [
+					"!wget -q https://archive.apache.org/dist/spark/spark-3.3.0/spark-3.3.0-bin-hadoop3.tgz"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "GCPM3e_F47wo"
+				},
+				"source": [
+					"!tar xf spark-3.3.0-bin-hadoop3.tgz"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "lRFFz8-O47wq"
+				},
+				"source": [
+					"# Set your spark folder to your system path environment. \n",
+					"import os\n",
+					"os.environ['JAVA_HOME'] = '/usr/lib/jvm/java-8-openjdk-amd64'\n",
+					"os.environ['SPARK_HOME'] = '/content/drive/MyDrive/Spark/spark-3.3.0-bin-hadoop3'"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"outputId": "cbb1ded5-e460-47e7-8898-a08916efe401",
+					"id": "NnE3_XXfVnkE"
+				},
+				"source": [
+					"# Install findspark using pip\n",
+					"!pip install -q findspark\n",
+					"!pip install -U pyspark==3.3\n",
+					"import findspark\n",
+					"findspark.init()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/",
+						"height": 221
+					},
+					"outputId": "179d124c-0eec-40fe-cc1d-b51be4610f19",
+					"id": "C6Fata6mR3jx"
+				},
+				"source": [
+					"# Pyspark Session for Colab\n",
+					"from pyspark.sql import SparkSession\n",
+					"spark = SparkSession.builder\\\n",
+					"        .master('local')\\\n",
+					"        .appName('Colab')\\\n",
+					"        .config('spark.driver.memory', '24g')\\\n",
+					"        .config('spark.executor.pyspark.memory', '18g')\\\n",
+					"        .config('spark.executor.cores', '4')\\\n",
+					"        .config('spark.python.worker.memory', '18g')\\\n",
+					"        .config('spark.sql.execution.arrow.pyspark.enabled', 'True')\\\n",
+					"        .config('spark.sql.debug.maxToStringFields', '1000')\\\n",
+					"        .config('spark.sql.autoBroadcastJoinThreshold', '-1')\\\n",
+					"        .config('spark.ui.port', '4050')\\\n",
+					"        .getOrCreate()\n",
+					"\n",
+					"spark"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "7MZZD4FkvMYM"
+				},
+				"source": [
+					"# Remove warnings\n",
+					"spark.sparkContext.setLogLevel('ERROR')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "OPoWM380Ihtj"
+				},
+				"source": [
+					"# Install & Import Packages and Set Seed"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "mzEE-fcNYc5r",
+					"outputId": "4ceb9066-41c7-4cce-ed11-f431cb13955e"
+				},
+				"source": [
+					"!pip install --upgrade mlflow \n",
+					"!pip install hyperopt\n",
+					"import random\n",
+					"import numpy as np\n",
+					"import warnings\n",
+					"from pyspark.sql.functions import col, round\n",
+					"from pyspark.sql.types import IntegerType, FloatType\n",
+					"from pyspark.ml.feature import VectorAssembler, MinMaxScaler, StandardScaler\n",
+					"from pyspark.ml import PipelineModel\n",
+					"from pyspark.ml.classification import LogisticRegression, LinearSVC\n",
+					"from pyspark.ml.classification import DecisionTreeClassifier\n",
+					"from pyspark.ml.classification import RandomForestClassifier, GBTClassifier\n",
+					"from pyspark.ml.tuning import ParamGridBuilder, CrossValidator\n",
+					"from pyspark.ml.evaluation import BinaryClassificationEvaluator\n",
+					"from pyspark.ml.evaluation import MulticlassClassificationEvaluator\n",
+					"from pyspark.mllib.evaluation import BinaryClassificationMetrics\n",
+					"import time\n",
+					"from datetime import datetime, timedelta\n",
+					"from timeit import default_timer as timer\n",
+					"try:\n",
+					"  import mlflow.pyspark.ml\n",
+					"  mlflow.pyspark.ml.autolog()\n",
+					"except:\n",
+					"  print(f'Your version of MLflow ({mlflow.__version__}) does not support pyspark.ml for autologging. To use autologging, upgrade your MLflow client version or use Databricks Runtime for ML 8.3 or above.')\n",
+					"warnings.filterwarnings('ignore')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "zxq23AoWjaF5"
+				},
+				"source": [
+					"# Set seed \n",
+					"seed_value = 42\n",
+					"os.environ['SparkML_HPO'] = str(seed_value)\n",
+					"random.seed(seed_value)\n",
+					"np.random.seed(seed_value)"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "Vu6FTxoSPNmk"
+				},
+				"source": [
+					"# Upsampling - Oversample Minority Class "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "e5-G8VmkR7ys"
+				},
+				"source": [
+					"## Read Data and View Schema"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "5j6lGI7pe5IZ",
+					"outputId": "c4db3e60-dd64-45b6-fe99-d14f401dbee4"
+				},
+				"source": [
+					"trainDF_US = spark.read.csv('/content/drive/MyDrive/LoanStatus/Data/trainDF_US.csv',\n",
+					"                         header=True, inferSchema=True)\n",
+					"trainDF_US.cache()\n",
+					"print('\\nTrain Schema')\n",
+					"trainDF_US.printSchema()\n",
+					"\n",
+					"testDF_US = spark.read.csv('/content/drive/MyDrive/LoanStatus/Data/testDF_US.csv',\n",
+					"                        header=True, inferSchema=True)\n",
+					"testDF_US.cache()\n",
+					"print('\\nTest Schema')\n",
+					"testDF_US.printSchema()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "zflH6vMkmRBu"
+				},
+				"source": [
+					"## Set up Vector Assembler, Scalers and Evaluators"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "RtYI5DHne5Ig"
+				},
+				"source": [
+					"# Define features and label for train data\n",
+					"features = trainDF_US.columns[0: len(trainDF_US.columns) - 1]\n",
+					"trainDF_US = trainDF_US.select(col('loan_status').alias('label'), *features)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "y92YFqDUe5Ij"
+				},
+				"source": [
+					"# VectorAssembler \n",
+					"vecAssembler = VectorAssembler(inputCols=features, \n",
+					"                               outputCol='unscaledFeatures', \n",
+					"                               handleInvalid='skip')  \n",
+					"\n",
+					"# Transform train data\n",
+					"trainDF_US = vecAssembler.transform(trainDF_US)  "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "V0pcWCo8e5Ik"
+				},
+				"source": [
+					"# Define features and label for test data \n",
+					"features = testDF_US.columns[0: len(testDF_US.columns) - 1]\n",
+					"testDF_US = testDF_US.select(col('loan_status').alias('label'), *features)\n",
+					"\n",
+					"# Transform test data\n",
+					"testDF_US = vecAssembler.transform(testDF_US)  "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "5ma2aHvD1c26"
+				},
+				"source": [
+					"# MinMaxScaler\n",
+					"mmScaler = MinMaxScaler(inputCol='unscaledFeatures', \n",
+					"                        outputCol='scaledFeatures',\n",
+					"                        min=0, max=1)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "1sx6AITa1c27"
+				},
+				"source": [
+					"# Standard scaler\n",
+					"stdScaler = StandardScaler(inputCol='unscaledFeatures', \n",
+					"                           outputCol='scaledFeatures', \n",
+					"                           withStd=True, \n",
+					"                           withMean=False)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "v5lYSawUcH3g"
+				},
+				"source": [
+					"# Define model evaluation - AUROC\n",
+					"evaluator_auroc = BinaryClassificationEvaluator(labelCol='label', \n",
+					"                                                metricName='areaUnderROC')\n",
+					"# Define model evaluation - Accuracy\n",
+					"evaluator_acc = MulticlassClassificationEvaluator(labelCol='label', \n",
+					"                                                  metricName='accuracy')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "PMxAn7m_YPnJ"
+				},
+				"source": [
+					"## Load Saved Models - Upsampling"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "yVVmK9xdssNL"
+				},
+				"source": [
+					"# AUROC\n",
+					"pipelineModel_lr_hyperopt_auroc_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_lr_hyperopt_us_auroc_100trials/')\n",
+					"pipelineModel_lsvc_hyperopt_auroc_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_lsvc_hyperopt_us_auroc/')\n",
+					"pipelineModel_dt_hyperopt_auroc_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_dt_hyperopt_us_auroc/')\n",
+					"pipelineModel_rf_hyperopt_auroc_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_rf_hyperopt_us_auroc_30trials/')\n",
+					"pipelineModel_rf_hyperopt_auroc1_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_rf_hyperopt_us_auroc_moreParams/')\n",
+					"pipelineModel_gbt_hyperopt_auroc_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_gbt_hyperopt_us_auroc/')\n",
+					"\n",
+					"# F1\n",
+					"pipelineModel_lr_hyperopt_f1_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_lr_hyperopt_us_f1_100trials/')\n",
+					"pipelineModel_lsvc_hyperopt_f1_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_lsvc_hyperopt_us_f1/')\n",
+					"pipelineModel_dt_hyperopt_f1_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_dt_hyperopt_us_f1/')\n",
+					"pipelineModel_rf_hyperopt_f1_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_rf_hyperopt_us_f1_30trials/')\n",
+					"pipelineModel_rf_hyperopt_f1_1_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_rf_hyperopt_us_f1_moreParams/')\n",
+					"pipelineModel_gbt_hyperopt_f1_US = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_gbt_hyperopt_us_f1/')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "fkJy-AzZBL-8"
+				},
+				"source": [
+					"## Predict and AUROC Model Metrics using testDF of Upsampling Set"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "slrk7ij2mRCF",
+					"outputId": "cbceeb88-e611-49ef-9212-785d8e174afe"
+				},
+				"source": [
+					"prediction_lr = pipelineModel_lr_hyperopt_auroc_US.transform(testDF_US)\n",
+					"prediction_lsvc = pipelineModel_lsvc_hyperopt_auroc_US.transform(testDF_US)\n",
+					"prediction_dt = pipelineModel_dt_hyperopt_auroc_US.transform(testDF_US)\n",
+					"prediction_rf = pipelineModel_rf_hyperopt_auroc_US.transform(testDF_US)\n",
+					"prediction_rf1 = pipelineModel_rf_hyperopt_auroc1_US.transform(testDF_US)\n",
+					"prediction_gbt = pipelineModel_gbt_hyperopt_auroc_US.transform(testDF_US)\n",
+					"\n",
+					"print('Hyperopt Best Models AUROC Metrics: Upsampling')\n",
+					"print('\\n')\n",
+					"print('Area Under ROC Curve:')\n",
+					"print('Logistic Regression:', evaluator_auroc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_auroc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_auroc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_auroc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_auroc.evaluate(prediction_rf1)) \n",
+					"print('Gradient Boosted Trees:', evaluator_auroc.evaluate(prediction_gbt)) \n",
+					"print('\\n')\n",
+					"print('Accuracy:')\n",
+					"print('Logistic Regression:', evaluator_acc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_acc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_acc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_acc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_acc.evaluate(prediction_rf1)) \n",
+					"print('Gradient Boosted Trees:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "fs41uiBZmRCH",
+					"outputId": "f6ee2d90-3542-4412-ca07-5790da7554bd"
+				},
+				"source": [
+					"print('Hyperopt Best Models AUROC Metrics: Upsampling')\n",
+					"for model in ['prediction_lr', 'prediction_lsvc', 'prediction_dt', \n",
+					"\t\t\t        'prediction_rf', 'prediction_rf1', 'prediction_gbt']:\n",
+					"    df = globals()[model]\n",
+					"    \n",
+					"    tp = df[(df.label == 1) & (df.prediction == 1)].count()\n",
+					"    tn = df[(df.label == 0) & (df.prediction == 0)].count()\n",
+					"    fp = df[(df.label == 0) & (df.prediction == 1)].count()\n",
+					"    fn = df[(df.label == 1) & (df.prediction == 0)].count()\n",
+					"    a = ((tp + tn)/df.count())\n",
+					"    \n",
+					"    if(tp + fn == 0.0):\n",
+					"        r = 0.0\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    elif(tp + fp == 0.0):\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = 0.0\n",
+					"    else:\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    \n",
+					"    if(p + r == 0):\n",
+					"        f1 = 0\n",
+					"    else:\n",
+					"        f1 = 2 * ((p * r)/(p + r))\n",
+					"    \n",
+					"    print('\\nModel:', model)\n",
+					"    print('True Positives:', tp)\n",
+					"    print('True Negatives:', tn)\n",
+					"    print('False Positives:', fp)\n",
+					"    print('False Negatives:', fn)\n",
+					"    print('Total:', df.count())\n",
+					"    print('Accuracy:', a)\n",
+					"    print('Recall:', r)\n",
+					"    print('Precision: ', p)\n",
+					"    print('F1 score:', f1)\n",
+					"    print('\\n')\n",
+					"print('\\n')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "-_BBTqRCBUkQ"
+				},
+				"source": [
+					"## Predict and F1 Model Metrics using testDF of Upsampling Set"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"background_save": true,
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "d141iyi8-u7a",
+					"outputId": "771aa0c3-eb13-4cf2-e827-2ec85c9612a5"
+				},
+				"source": [
+					"prediction_lr = pipelineModel_lr_hyperopt_f1_US.transform(testDF_US)\n",
+					"prediction_lsvc = pipelineModel_lsvc_hyperopt_f1_US.transform(testDF_US)\n",
+					"prediction_dt = pipelineModel_dt_hyperopt_f1_US.transform(testDF_US)\n",
+					"prediction_rf = pipelineModel_rf_hyperopt_f1_US.transform(testDF_US)\n",
+					"prediction_rf1 = pipelineModel_rf_hyperopt_f1_1_US.transform(testDF_US)\n",
+					"prediction_gbt = pipelineModel_gbt_hyperopt_f1_US.transform(testDF_US)\n",
+					"\n",
+					"print('Hyperopt Best Models F1 Metrics: Upsampling')\n",
+					"print('\\n')\n",
+					"print('Area Under ROC Curve:')\n",
+					"print('Logistic Regression:', evaluator_auroc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_auroc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_auroc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_auroc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_auroc.evaluate(prediction_rf1)) \n",
+					"print('Gradient Boosted Trees:', evaluator_auroc.evaluate(prediction_gbt)) \n",
+					"print('\\n')\n",
+					"print('Accuracy:')\n",
+					"print('Logistic Regression:', evaluator_acc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_acc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_acc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_acc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_acc.evaluate(prediction_rf1)) \n",
+					"print('Gradient Boosted Trees:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"background_save": true
+					},
+					"id": "JRr2TTDN_CcW",
+					"outputId": "c58ebb67-6734-402a-ea99-c8842f8dafed"
+				},
+				"source": [
+					"print('Hyperopt Best Models F1 Metrics: Upsampling')\n",
+					"for model in ['prediction_lr', 'prediction_lsvc', 'prediction_dt', \n",
+					"\t\t\t        'prediction_rf', 'prediction_rf1', 'prediction_gbt']:\n",
+					"    df = globals()[model]\n",
+					"    \n",
+					"    tp = df[(df.label == 1) & (df.prediction == 1)].count()\n",
+					"    tn = df[(df.label == 0) & (df.prediction == 0)].count()\n",
+					"    fp = df[(df.label == 0) & (df.prediction == 1)].count()\n",
+					"    fn = df[(df.label == 1) & (df.prediction == 0)].count()\n",
+					"    a = ((tp + tn)/df.count())\n",
+					"    \n",
+					"    if(tp + fn == 0.0):\n",
+					"        r = 0.0\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    elif(tp + fp == 0.0):\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = 0.0\n",
+					"    else:\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    \n",
+					"    if(p + r == 0):\n",
+					"        f1 = 0\n",
+					"    else:\n",
+					"        f1 = 2 * ((p * r)/(p + r))\n",
+					"    \n",
+					"    print('\\nModel:', model)\n",
+					"    print('True Positives:', tp)\n",
+					"    print('True Negatives:', tn)\n",
+					"    print('False Positives:', fp)\n",
+					"    print('False Negatives:', fn)\n",
+					"    print('Total:', df.count())\n",
+					"    print('Accuracy:', a)\n",
+					"    print('Recall:', r)\n",
+					"    print('Precision: ', p)\n",
+					"    print('F1 score:', f1)\n",
+					"    print('\\n')\n",
+					"print('\\n')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "0UrlqcEFxCb5"
+				},
+				"source": [
+					"## Load Saved Models - SMOTE"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "hkAd8l0vzO0J"
+				},
+				"source": [
+					"# AUROC\n",
+					"pipelineModel_lr_hyperopt_auroc_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_lr_hyperopt_smote_auroc_100trials/')\n",
+					"pipelineModel_lsvc_hyperopt_auroc_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_lsvc_hyperopt_smote_auroc/')\n",
+					"pipelineModel_dt_hyperopt_auroc_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_dt_hyperopt_smote_auroc/')\n",
+					"pipelineModel_rf_hyperopt_auroc_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_rf_hyperopt_smote_auroc_30trials/')\n",
+					"pipelineModel_rf_hyperopt_auroc1_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_rf_hyperopt_smote_auroc_moreParams/')\n",
+					"pipelineModel_gbt_hyperopt_auroc_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_gbt_hyperopt_smote_auroc/')\n",
+					"\n",
+					"# F1\n",
+					"pipelineModel_lr_hyperopt_f1_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_lr_hyperopt_smote_f1_100trials/')\n",
+					"pipelineModel_lsvc_hyperopt_f1_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_lsvc_hyperopt_smote_f1/')\n",
+					"pipelineModel_dt_hyperopt_f1_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_dt_hyperopt_smote_f1/')\n",
+					"pipelineModel_rf_hyperopt_f1_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_rf_hyperopt_smote_f1_29trials/')\n",
+					"pipelineModel_rf_hyperopt_f1_1_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_rf_hyperopt_smote_f1_moreParams/')\n",
+					"pipelineModel_gbt_hyperopt_f1_SMOTE = PipelineModel.load('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/Hyperopt/pipelineModel_gbt_hyperopt_smote_f1/')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "yx5JUfOdBayH"
+				},
+				"source": [
+					"## Predict and SMOTE AUROC Model Metrics using testDF of Upsampling Set"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "PN-ZhfY_mRCN",
+					"outputId": "1330ab80-1c35-45c9-bf71-fc3a292d2546"
+				},
+				"source": [
+					"prediction_lr = pipelineModel_lr_hyperopt_auroc_SMOTE.transform(testDF_US)\n",
+					"prediction_lsvc = pipelineModel_lsvc_hyperopt_auroc_SMOTE.transform(testDF_US)\n",
+					"prediction_dt = pipelineModel_dt_hyperopt_auroc_SMOTE.transform(testDF_US)\n",
+					"prediction_rf = pipelineModel_rf_hyperopt_auroc_SMOTE.transform(testDF_US)\n",
+					"prediction_rf1 = pipelineModel_rf_hyperopt_auroc1_SMOTE.transform(testDF_US)\n",
+					"prediction_gbt = pipelineModel_gbt_hyperopt_auroc_SMOTE.transform(testDF_US)\n",
+					"\n",
+					"print('Hyperopt Best Models AUROC Metrics: SMOTE Models using Upsampling Data')\n",
+					"print('\\n')\n",
+					"print('Area Under ROC Curve:')\n",
+					"print('Logistic Regression:', evaluator_auroc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_auroc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_auroc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_auroc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_auroc.evaluate(prediction_rf1)) \n",
+					"print('Gradient Boosted Trees:', evaluator_auroc.evaluate(prediction_gbt)) \n",
+					"print('\\n')\n",
+					"print('Accuracy:')\n",
+					"print('Logistic Regression:', evaluator_acc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_acc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_acc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_acc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_acc.evaluate(prediction_rf1)) \n",
+					"print('Gradient Boosted Trees:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "LdcveFL8mRCP",
+					"outputId": "6d4c5c3b-eb3d-4fe6-cf24-5316281510ec"
+				},
+				"source": [
+					"print('Hyperopt Best Models AUROC Metrics: SMOTE Models using Upsampling Data')\n",
+					"for model in ['prediction_lr', 'prediction_lsvc', 'prediction_dt', \n",
+					"\t\t\t        'prediction_rf', 'prediction_rf1', 'prediction_gbt']:\n",
+					"    df = globals()[model]\n",
+					"    \n",
+					"    tp = df[(df.label == 1) & (df.prediction == 1)].count()\n",
+					"    tn = df[(df.label == 0) & (df.prediction == 0)].count()\n",
+					"    fp = df[(df.label == 0) & (df.prediction == 1)].count()\n",
+					"    fn = df[(df.label == 1) & (df.prediction == 0)].count()\n",
+					"    a = ((tp + tn)/df.count())\n",
+					"    \n",
+					"    if(tp + fn == 0.0):\n",
+					"        r = 0.0\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    elif(tp + fp == 0.0):\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = 0.0\n",
+					"    else:\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    \n",
+					"    if(p + r == 0):\n",
+					"        f1 = 0\n",
+					"    else:\n",
+					"        f1 = 2 * ((p * r)/(p + r))\n",
+					"    \n",
+					"    print('\\nModel:', model)\n",
+					"    print('True Positives:', tp)\n",
+					"    print('True Negatives:', tn)\n",
+					"    print('False Positives:', fp)\n",
+					"    print('False Negatives:', fn)\n",
+					"    print('Total:', df.count())\n",
+					"    print('Accuracy:', a)\n",
+					"    print('Recall:', r)\n",
+					"    print('Precision: ', p)\n",
+					"    print('F1 score:', f1)\n",
+					"    print('\\n')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "IpVplIp3Be1j"
+				},
+				"source": [
+					"## Predict and SMOTE F1 Model Metrics using testDF of Upsampling Set"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "pnklHw7m_eiJ",
+					"outputId": "02d36479-5917-4b41-bb51-150e24c79daa"
+				},
+				"source": [
+					"prediction_lr = pipelineModel_lr_hyperopt_f1_SMOTE.transform(testDF_US)\n",
+					"prediction_lsvc = pipelineModel_lsvc_hyperopt_f1_SMOTE.transform(testDF_US)\n",
+					"prediction_dt = pipelineModel_dt_hyperopt_f1_SMOTE.transform(testDF_US)\n",
+					"prediction_rf = pipelineModel_rf_hyperopt_f1_SMOTE.transform(testDF_US)\n",
+					"prediction_rf1 = pipelineModel_rf_hyperopt_f1_1_SMOTE.transform(testDF_US)\n",
+					"prediction_gbt = pipelineModel_gbt_hyperopt_f1_SMOTE.transform(testDF_US)\n",
+					"\n",
+					"print('Hyperopt Best Models F1 Metrics: SMOTE Models using Upsampling Data')\n",
+					"print('\\n')\n",
+					"print('Area Under ROC Curve:')\n",
+					"print('Logistic Regression:', evaluator_auroc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_auroc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_auroc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_auroc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_auroc.evaluate(prediction_rf1)) \n",
+					"print('Gradient Boosted Trees:', evaluator_auroc.evaluate(prediction_gbt)) \n",
+					"print('\\n')\n",
+					"print('Accuracy:')\n",
+					"print('Logistic Regression:', evaluator_acc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_acc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_acc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_acc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_acc.evaluate(prediction_rf1)) \n",
+					"print('Gradient Boosted Trees:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "ZefNDOR0_eiL",
+					"outputId": "24eda14f-2691-43ab-8eb1-5643cedce924"
+				},
+				"source": [
+					"print('Hyperopt Best Models F1 Metrics: SMOTE Models using Upsampling Data')\n",
+					"for model in ['prediction_lr', 'prediction_lsvc', 'prediction_dt', \n",
+					"\t\t\t        'prediction_rf', 'prediction_rf1', 'prediction_gbt']:\n",
+					"    df = globals()[model]\n",
+					"    \n",
+					"    tp = df[(df.label == 1) & (df.prediction == 1)].count()\n",
+					"    tn = df[(df.label == 0) & (df.prediction == 0)].count()\n",
+					"    fp = df[(df.label == 0) & (df.prediction == 1)].count()\n",
+					"    fn = df[(df.label == 1) & (df.prediction == 0)].count()\n",
+					"    a = ((tp + tn)/df.count())\n",
+					"    \n",
+					"    if(tp + fn == 0.0):\n",
+					"        r = 0.0\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    elif(tp + fp == 0.0):\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = 0.0\n",
+					"    else:\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    \n",
+					"    if(p + r == 0):\n",
+					"        f1 = 0\n",
+					"    else:\n",
+					"        f1 = 2 * ((p * r)/(p + r))\n",
+					"    \n",
+					"    print('\\nModel:', model)\n",
+					"    print('True Positives:', tp)\n",
+					"    print('True Negatives:', tn)\n",
+					"    print('False Positives:', fp)\n",
+					"    print('False Negatives:', fn)\n",
+					"    print('Total:', df.count())\n",
+					"    print('Accuracy:', a)\n",
+					"    print('Recall:', r)\n",
+					"    print('Precision: ', p)\n",
+					"    print('F1 score:', f1)\n",
+					"    print('\\n')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "AkGcRZadQj0t"
+				},
+				"source": [
+					"# SMOTE - Split Over Upsampling "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "FrpLEgGnQqkQ"
+				},
+				"source": [
+					"## Read Data and View Schema"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "Jp5nX-x-mRCU",
+					"outputId": "ed452ecb-a95b-40d2-c4f7-c90f2c102f1f"
+				},
+				"source": [
+					"trainDF_SMOTE = spark.read.csv('/content/drive/MyDrive/LoanStatus/Data/trainDF_SMOTE.csv', \n",
+					"                               header=True, inferSchema=True)\n",
+					"trainDF_SMOTE.cache()\n",
+					"trainDF_SMOTE = trainDF_SMOTE \\\n",
+					"  .withColumn('loan_amnt', trainDF_SMOTE['loan_amnt'].cast(IntegerType())) \\\n",
+					"  .withColumn('revol_bal', trainDF_SMOTE['revol_bal'].cast(IntegerType())) \\\n",
+					"  .withColumn('term_ 60 months', trainDF_SMOTE['term_ 60 months'].cast(IntegerType())) \\\n",
+					"  .withColumn('grade_B', trainDF_SMOTE['grade_B'].cast(IntegerType())) \\\n",
+					"  .withColumn('grade_C', trainDF_SMOTE['grade_C'].cast(IntegerType())) \\\n",
+					"  .withColumn('grade_D', trainDF_SMOTE['grade_D'].cast(IntegerType())) \\\n",
+					"  .withColumn('home_ownership_MORTGAGE', trainDF_SMOTE['home_ownership_MORTGAGE'].cast(IntegerType())) \\\n",
+					"  .withColumn('home_ownership_OWN', trainDF_SMOTE['home_ownership_OWN'].cast(IntegerType())) \\\n",
+					"  .withColumn('home_ownership_RENT', trainDF_SMOTE['home_ownership_RENT'].cast(IntegerType())) \\\n",
+					"  .withColumn('verification_status_Source Verified', trainDF_SMOTE['verification_status_Source Verified'].cast(IntegerType())) \\\n",
+					"  .withColumn('verification_status_Verified', trainDF_SMOTE['verification_status_Verified'].cast(IntegerType())) \\\n",
+					"  .withColumn('purpose_credit_card', trainDF_SMOTE['purpose_credit_card'].cast(IntegerType())) \\\n",
+					"  .withColumn('initial_list_status_w', trainDF_SMOTE['initial_list_status_w'].cast(IntegerType())) \\\n",
+					"  .withColumn('application_type_Joint App', trainDF_SMOTE['application_type_Joint App'].cast(IntegerType())) \\\n",
+					"  .withColumn('disbursement_method_DirectPay', trainDF_SMOTE['disbursement_method_DirectPay'].cast(IntegerType())) \n",
+					"print('\\nTrain Schema')\n",
+					"trainDF_SMOTE.printSchema()\n",
+					"\n",
+					"testDF_SMOTE = spark.read.csv('/content/drive/MyDrive/LoanStatus/Data/testDF_SMOTE.csv',\n",
+					"                              header=True, inferSchema=True)\n",
+					"testDF_SMOTE.cache()\n",
+					"print('\\nTest Schema')\n",
+					"testDF_SMOTE.printSchema()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "qcmOMEP_fdja"
+				},
+				"source": [
+					"## Set up Vector Assembler"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "R5sTKk1Afdjd"
+				},
+				"source": [
+					"# Define features and label for train data\n",
+					"features = trainDF_SMOTE.columns[0: len(trainDF_SMOTE.columns) - 1]\n",
+					"trainDF_SMOTE = trainDF_SMOTE.select(col('loan_status').alias('label'), *features)\n",
+					"\n",
+					"# Transform train data\n",
+					"trainDF_SMOTE = vecAssembler.transform(trainDF_SMOTE)  "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "tU5DagCqfdjm"
+				},
+				"source": [
+					"# Define features and label for test data \n",
+					"features = testDF_SMOTE.columns[0: len(testDF_SMOTE.columns) - 1]\n",
+					"testDF_SMOTE = testDF_SMOTE.select(col('loan_status').alias('label'), *features)\n",
+					"\n",
+					"# Transform test data\n",
+					"testDF_SMOTE = vecAssembler.transform(testDF_SMOTE)  "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "uemRx0NHB0Mw"
+				},
+				"source": [
+					"## Predict and AUROC Model Metrics using testDF of SMOTE Set"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "IsURk9cMmRCc",
+					"outputId": "ca9599f5-31f0-4b14-e72a-efe5e1d99087"
+				},
+				"source": [
+					"prediction_lr = pipelineModel_lr_hyperopt_auroc_SMOTE.transform(testDF_SMOTE)\n",
+					"prediction_lsvc = pipelineModel_lsvc_hyperopt_auroc_SMOTE.transform(testDF_SMOTE)\n",
+					"prediction_dt = pipelineModel_dt_hyperopt_auroc_SMOTE.transform(testDF_SMOTE)\n",
+					"prediction_rf = pipelineModel_rf_hyperopt_auroc_SMOTE.transform(testDF_SMOTE)\n",
+					"prediction_rf1 = pipelineModel_rf_hyperopt_auroc1_SMOTE.transform(testDF_SMOTE)\n",
+					"prediction_gbt = pipelineModel_gbt_hyperopt_auroc_SMOTE.transform(testDF_SMOTE)\n",
+					"\n",
+					"print('Hyperopt Best Models AUROC Metrics: SMOTE')\n",
+					"print('\\n')\n",
+					"print('Area Under ROC Curve:')\n",
+					"print('Logistic Regression:', evaluator_auroc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_auroc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_auroc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_auroc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_auroc.evaluate(prediction_rf1)) \n",
+					"print('Gradient Boosted Trees:', evaluator_auroc.evaluate(prediction_gbt)) \n",
+					"print('\\n')\n",
+					"print('Accuracy:')\n",
+					"print('Logistic Regression:', evaluator_acc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_acc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_acc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_acc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_acc.evaluate(prediction_rf1)) \n",
+					"print('Gradient Boosted Trees:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "CDbF2sG0fAsm",
+					"outputId": "fac59fad-2816-42df-de64-12befb3baf9a"
+				},
+				"source": [
+					"print('Hyperopt Best Models AUROC Metrics: SMOTE')\n",
+					"for model in ['prediction_lr', 'prediction_lsvc', 'prediction_dt',\n",
+					"              'prediction_rf', 'prediction_rf1', 'prediction_gbt']:\n",
+					"    df = globals()[model]\n",
+					"    \n",
+					"    tp = df[(df.label == 1) & (df.prediction == 1)].count()\n",
+					"    tn = df[(df.label == 0) & (df.prediction == 0)].count()\n",
+					"    fp = df[(df.label == 0) & (df.prediction == 1)].count()\n",
+					"    fn = df[(df.label == 1) & (df.prediction == 0)].count()\n",
+					"    a = ((tp + tn)/df.count())\n",
+					"    \n",
+					"    if(tp + fn == 0.0):\n",
+					"        r = 0.0\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    elif(tp + fp == 0.0):\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = 0.0\n",
+					"    else:\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    \n",
+					"    if(p + r == 0):\n",
+					"        f1 = 0\n",
+					"    else:\n",
+					"        f1 = 2 * ((p * r)/(p + r))\n",
+					"    \n",
+					"    print('\\nModel:', model)\n",
+					"    print('True Positives:', tp)\n",
+					"    print('True Negatives:', tn)\n",
+					"    print('False Positives:', fp)\n",
+					"    print('False Negatives:', fn)\n",
+					"    print('Total:', df.count())\n",
+					"    print('Accuracy:', a)\n",
+					"    print('Recall:', r)\n",
+					"    print('Precision: ', p)\n",
+					"    print('F1 score:', f1)\n",
+					"    print('\\n')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "E1qe4Y46IbEE"
+				},
+				"source": [
+					"## Predict and F1 Model Metrics using testDF of SMOTE Set"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "ruYsNoXNIbEF",
+					"outputId": "d8e6b771-5c8c-48e7-b210-f1cd49bc80ef"
+				},
+				"source": [
+					"prediction_lr = pipelineModel_lr_hyperopt_f1_SMOTE.transform(testDF_SMOTE)\n",
+					"prediction_lsvc = pipelineModel_lsvc_hyperopt_f1_SMOTE.transform(testDF_SMOTE)\n",
+					"prediction_dt = pipelineModel_dt_hyperopt_f1_SMOTE.transform(testDF_SMOTE)\n",
+					"prediction_rf = pipelineModel_rf_hyperopt_f1_SMOTE.transform(testDF_SMOTE)\n",
+					"prediction_rf1 = pipelineModel_rf_hyperopt_f1_1_SMOTE.transform(testDF_SMOTE)\n",
+					"prediction_gbt = pipelineModel_gbt_hyperopt_f1_SMOTE.transform(testDF_SMOTE)\n",
+					"\n",
+					"print('Hyperopt Best Models F1 Metrics: SMOTE')\n",
+					"print('\\n')\n",
+					"print('Area Under ROC Curve:')\n",
+					"print('Logistic Regression:', evaluator_auroc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_auroc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_auroc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_auroc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_auroc.evaluate(prediction_rf1))\n",
+					"print('Gradient Boosted Trees:', evaluator_auroc.evaluate(prediction_gbt)) \n",
+					"print('\\n')\n",
+					"print('Accuracy:')\n",
+					"print('Logistic Regression:', evaluator_acc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_acc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_acc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_acc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_acc.evaluate(prediction_rf1))\n",
+					"print('Gradient Boosted Trees:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "I486twx1IbEI",
+					"outputId": "3dde0782-75a0-466e-b0d9-17324e6a462e"
+				},
+				"source": [
+					"print('Hyperopt Best Models F1 Metrics: SMOTE')\n",
+					"for model in ['prediction_lr', 'prediction_lsvc', 'prediction_dt',\n",
+					"              'prediction_rf', 'prediction_rf1', 'prediction_gbt']:\n",
+					"    df = globals()[model]\n",
+					"    \n",
+					"    tp = df[(df.label == 1) & (df.prediction == 1)].count()\n",
+					"    tn = df[(df.label == 0) & (df.prediction == 0)].count()\n",
+					"    fp = df[(df.label == 0) & (df.prediction == 1)].count()\n",
+					"    fn = df[(df.label == 1) & (df.prediction == 0)].count()\n",
+					"    a = ((tp + tn)/df.count())\n",
+					"    \n",
+					"    if(tp + fn == 0.0):\n",
+					"        r = 0.0\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    elif(tp + fp == 0.0):\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = 0.0\n",
+					"    else:\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    \n",
+					"    if(p + r == 0):\n",
+					"        f1 = 0\n",
+					"    else:\n",
+					"        f1 = 2 * ((p * r)/(p + r))\n",
+					"    \n",
+					"    print('\\nModel:', model)\n",
+					"    print('True Positives:', tp)\n",
+					"    print('True Negatives:', tn)\n",
+					"    print('False Positives:', fp)\n",
+					"    print('False Negatives:', fn)\n",
+					"    print('Total:', df.count())\n",
+					"    print('Accuracy:', a)\n",
+					"    print('Recall:', r)\n",
+					"    print('Precision: ', p)\n",
+					"    print('F1 score:', f1)\n",
+					"    print('\\n')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "LbYfUUpWFTyS"
+				},
+				"source": [
+					"## Predict and Upsampling AUROC Model Metrics using testDF of SMOTE Set"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "Qk5NveEWFTyU",
+					"outputId": "338c1a21-a6ad-404f-f44e-40b8fbaa0e86"
+				},
+				"source": [
+					"prediction_lr = pipelineModel_lr_hyperopt_auroc_US.transform(testDF_SMOTE)\n",
+					"prediction_lsvc = pipelineModel_lsvc_hyperopt_auroc_US.transform(testDF_SMOTE)\n",
+					"prediction_dt = pipelineModel_dt_hyperopt_auroc_US.transform(testDF_SMOTE)\n",
+					"prediction_rf = pipelineModel_rf_hyperopt_auroc_US.transform(testDF_SMOTE)\n",
+					"prediction_rf1 = pipelineModel_rf_hyperopt_auroc1_US.transform(testDF_SMOTE)\n",
+					"prediction_gbt = pipelineModel_gbt_hyperopt_auroc_US.transform(testDF_SMOTE)\n",
+					"\n",
+					"print('Hyperopt Best Models AUROC Metrics: Upsampling Models using SMOTE Data')\n",
+					"print('\\n')\n",
+					"print('Area Under ROC Curve:')\n",
+					"print('Logistic Regression:', evaluator_auroc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_auroc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_auroc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_auroc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_auroc.evaluate(prediction_rf1))\n",
+					"print('Gradient Boosted Trees:', evaluator_auroc.evaluate(prediction_gbt)) \n",
+					"print('\\n')\n",
+					"print('Accuracy:')\n",
+					"print('Logistic Regression:', evaluator_acc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_acc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_acc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_acc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_acc.evaluate(prediction_rf1))\n",
+					"print('Gradient Boosted Trees:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "g9b0lfZ4FTyV",
+					"outputId": "cdd77333-39a5-4529-ccf8-b3f993f038f8"
+				},
+				"source": [
+					"print('Hyperopt Best Models AUROC Metrics: Upsampling Models using SMOTE Data')\n",
+					"for model in ['prediction_lr', 'prediction_lsvc', 'prediction_dt', \n",
+					"\t\t\t        'prediction_rf', 'prediction_rf1', 'prediction_gbt']:\n",
+					"    df = globals()[model]\n",
+					"    \n",
+					"    tp = df[(df.label == 1) & (df.prediction == 1)].count()\n",
+					"    tn = df[(df.label == 0) & (df.prediction == 0)].count()\n",
+					"    fp = df[(df.label == 0) & (df.prediction == 1)].count()\n",
+					"    fn = df[(df.label == 1) & (df.prediction == 0)].count()\n",
+					"    a = ((tp + tn)/df.count())\n",
+					"    \n",
+					"    if(tp + fn == 0.0):\n",
+					"        r = 0.0\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    elif(tp + fp == 0.0):\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = 0.0\n",
+					"    else:\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    \n",
+					"    if(p + r == 0):\n",
+					"        f1 = 0\n",
+					"    else:\n",
+					"        f1 = 2 * ((p * r)/(p + r))\n",
+					"    \n",
+					"    print('\\nModel:', model)\n",
+					"    print('True Positives:', tp)\n",
+					"    print('True Negatives:', tn)\n",
+					"    print('False Positives:', fp)\n",
+					"    print('False Negatives:', fn)\n",
+					"    print('Total:', df.count())\n",
+					"    print('Accuracy:', a)\n",
+					"    print('Recall:', r)\n",
+					"    print('Precision: ', p)\n",
+					"    print('F1 score:', f1)\n",
+					"    print('\\n')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "Qog4ZUezFTyX"
+				},
+				"source": [
+					"## Predict and Upsampling F1 Model Metrics using testDF of SMOTE Set"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "v7pCWWzLFTyZ",
+					"outputId": "a6a43557-2d0d-40a8-8cff-db42fb36201c"
+				},
+				"source": [
+					"prediction_lr = pipelineModel_lr_hyperopt_f1_US.transform(testDF_SMOTE)\n",
+					"prediction_lsvc = pipelineModel_lsvc_hyperopt_f1_US.transform(testDF_SMOTE)\n",
+					"prediction_dt = pipelineModel_dt_hyperopt_f1_US.transform(testDF_SMOTE)\n",
+					"prediction_rf = pipelineModel_rf_hyperopt_f1_US.transform(testDF_SMOTE)\n",
+					"prediction_rf1 = pipelineModel_rf_hyperopt_f1_1_US.transform(testDF_SMOTE)\n",
+					"prediction_gbt = pipelineModel_gbt_hyperopt_f1_US.transform(testDF_SMOTE)\n",
+					"\n",
+					"print('Hyperopt Best Models F1 Metrics: Upsampling Models using SMOTE Data')\n",
+					"print('\\n')\n",
+					"print('Area Under ROC Curve:')\n",
+					"print('Logistic Regression:', evaluator_auroc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_auroc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_auroc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_auroc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_auroc.evaluate(prediction_rf1))\n",
+					"print('Gradient Boosted Trees:', evaluator_auroc.evaluate(prediction_gbt)) \n",
+					"print('\\n')\n",
+					"print('Accuracy:')\n",
+					"print('Logistic Regression:', evaluator_acc.evaluate(prediction_lr)) \n",
+					"print('LinearSVC:', evaluator_acc.evaluate(prediction_lsvc)) \n",
+					"print('Decision Trees:', evaluator_acc.evaluate(prediction_dt)) \n",
+					"print('Random Forest:', evaluator_acc.evaluate(prediction_rf)) \n",
+					"print('Random Forest - More Params:', evaluator_acc.evaluate(prediction_rf1))\n",
+					"print('Gradient Boosted Trees:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "tmolnwGHFTya",
+					"outputId": "6a2eb677-a4c1-4a74-9192-b6901e3daca4"
+				},
+				"source": [
+					"print('Hyperopt Best Models F1 Metrics: Upsampling Models using SMOTE Data')\n",
+					"for model in ['prediction_lr', 'prediction_lsvc', 'prediction_dt', \n",
+					"\t\t\t        'prediction_rf', 'prediction_rf1', 'prediction_gbt']:\n",
+					"    df = globals()[model]\n",
+					"    \n",
+					"    tp = df[(df.label == 1) & (df.prediction == 1)].count()\n",
+					"    tn = df[(df.label == 0) & (df.prediction == 0)].count()\n",
+					"    fp = df[(df.label == 0) & (df.prediction == 1)].count()\n",
+					"    fn = df[(df.label == 1) & (df.prediction == 0)].count()\n",
+					"    a = ((tp + tn)/df.count())\n",
+					"    \n",
+					"    if(tp + fn == 0.0):\n",
+					"        r = 0.0\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    elif(tp + fp == 0.0):\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = 0.0\n",
+					"    else:\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    \n",
+					"    if(p + r == 0):\n",
+					"        f1 = 0\n",
+					"    else:\n",
+					"        f1 = 2 * ((p * r)/(p + r))\n",
+					"    \n",
+					"    print('\\nModel:', model)\n",
+					"    print('True Positives:', tp)\n",
+					"    print('True Negatives:', tn)\n",
+					"    print('False Positives:', fp)\n",
+					"    print('False Negatives:', fn)\n",
+					"    print('Total:', df.count())\n",
+					"    print('Accuracy:', a)\n",
+					"    print('Recall:', r)\n",
+					"    print('Precision: ', p)\n",
+					"    print('F1 score:', f1)\n",
+					"    print('\\n')"
+				]
+			}
+		]
+	}
+}

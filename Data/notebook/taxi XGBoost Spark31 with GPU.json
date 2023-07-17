@@ -1,0 +1,370 @@
+{
+	"name": "taxi XGBoost Spark31 with GPU",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "a4c5156b-8b7b-467c-8366-1f45deb902c6"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "python"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"source": [
+					"# Introduction to XGBoost Spark3.1 with GPU\n",
+					"\n",
+					"Taxi is an example of xgboost regressor. This notebook will show you how to load data, train the xgboost model and use this model to predict \"fare_amount\" of your taxi trip.\n",
+					"\n",
+					"A few libraries required for this notebook:\n",
+					"  1. cudf-cu11\n",
+					"  2. xgboost\n",
+					"  3. scikit-learn\n",
+					"  4. numpy\n",
+					"\n",
+					"This notebook also illustrates the ease of porting a sample CPU based Spark xgboost4j code into GPU. There is no change required for running Spark XGBoost on GPU because both CPU and GPU call the same API. For CPU run, we need to vectorize the trained dataset before fitting data to regressor."
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"#### Import Required Libraries"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"spark.conf.set('spark.rapids.sql.enabled','true')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from xgboost.spark import SparkXGBRegressor, SparkXGBRegressorModel\n",
+					"from pyspark.ml.evaluation import RegressionEvaluator\n",
+					"from pyspark.sql import SparkSession\n",
+					"from pyspark.sql.types import FloatType, IntegerType, StructField, StructType\n",
+					"from time import time\n",
+					"from pyspark.conf import SparkConf\n",
+					"import os\n",
+					"# if you pass/unpack the archive file and enable the environment\n",
+					"# os.environ['PYSPARK_PYTHON'] = \"./environment/bin/python\"\n",
+					"# os.environ['PYSPARK_DRIVER_PYTHON'] = \"./environment/bin/python\""
+				],
+				"execution_count": 1
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"Besides CPU version requires two extra libraries.\n",
+					"```Python\n",
+					"from pyspark.ml.feature import VectorAssembler\n",
+					"from pyspark.sql.functions import col\n",
+					"```"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"#### Create Spark Session and Data Reader"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"SPARK_MASTER_URL = os.getenv(\"SPARK_MASTER_URL\", \"/your-url\")\n",
+					"\n",
+					"RAPIDS_JAR = os.getenv(\"RAPIDS_JAR\", \"/your-jar-path\")\n",
+					"\n",
+					"# You need to update with your real hardware resource \n",
+					"driverMem = os.getenv(\"DRIVER_MEM\", \"2g\")\n",
+					"executorMem = os.getenv(\"EXECUTOR_MEM\", \"2g\")\n",
+					"pinnedPoolSize = os.getenv(\"PINNED_POOL_SIZE\", \"2g\")\n",
+					"concurrentGpuTasks = os.getenv(\"CONCURRENT_GPU_TASKS\", \"2\")\n",
+					"executorCores = int(os.getenv(\"EXECUTOR_CORES\", \"2\"))\n",
+					"# Common spark settings\n",
+					"conf = SparkConf()\n",
+					"conf.setMaster(SPARK_MASTER_URL)\n",
+					"conf.setAppName(\"Microbenchmark on GPU\")\n",
+					"conf.set(\"spark.executor.instances\",\"1\")\n",
+					"conf.set(\"spark.driver.memory\", driverMem)\n",
+					"## The tasks will run on GPU memory, so there is no need to set a high host memory\n",
+					"conf.set(\"spark.executor.memory\", executorMem)\n",
+					"## The tasks will run on GPU cores, so there is no need to use many cpu cores\n",
+					"conf.set(\"spark.executor.cores\", executorCores)\n",
+					"\n",
+					"# Plugin settings\n",
+					"conf.set(\"spark.executor.resource.gpu.amount\", \"1\")\n",
+					"conf.set(\"spark.rapids.sql.concurrentGpuTasks\", concurrentGpuTasks)\n",
+					"conf.set(\"spark.rapids.memory.pinnedPool.size\", pinnedPoolSize)\n",
+					"# since pyspark and xgboost share the same GPU, we need to allocate some memory to xgboost to avoid GPU OOM while training \n",
+					"conf.set(\"spark.rapids.memory.gpu.allocFraction\",\"0.7\")\n",
+					"conf.set(\"spark.locality.wait\",\"0\")\n",
+					"##############note: only support value=1 https://github.com/dmlc/xgboost/blame/master/python-package/xgboost/spark/core.py#L370-L374\n",
+					"conf.set(\"spark.task.resource.gpu.amount\", 1) \n",
+					"conf.set(\"spark.rapids.sql.enabled\", \"true\") \n",
+					"conf.set(\"spark.plugins\", \"com.nvidia.spark.SQLPlugin\")\n",
+					"conf.set(\"spark.sql.cache.serializer\",\"com.nvidia.spark.ParquetCachedBatchSerializer\")\n",
+					"conf.set(\"spark.sql.execution.arrow.maxRecordsPerBatch\", 200000) \n",
+					"conf.set(\"spark.driver.extraClassPath\", RAPIDS_JAR)\n",
+					"conf.set(\"spark.executor.extraClassPath\", RAPIDS_JAR)\n",
+					"\n",
+					"# if you pass/unpack the archive file and enable the environment\n",
+					"# conf.set(\"spark.yarn.dist.archives\", \"your_pyspark_venv.tar.gz#environment\")\n",
+					"# Create spark session\n",
+					"spark = SparkSession.builder.config(conf=conf).getOrCreate()\n",
+					"\n",
+					"reader = spark.read"
+				],
+				"execution_count": 2
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"#### Specify the Data Schema and Load the Data"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"label = 'fare_amount'\n",
+					"schema = StructType([\n",
+					"    StructField('vendor_id', FloatType()),\n",
+					"    StructField('passenger_count', FloatType()),\n",
+					"    StructField('trip_distance', FloatType()),\n",
+					"    StructField('pickup_longitude', FloatType()),\n",
+					"    StructField('pickup_latitude', FloatType()),\n",
+					"    StructField('rate_code', FloatType()),\n",
+					"    StructField('store_and_fwd', FloatType()),\n",
+					"    StructField('dropoff_longitude', FloatType()),\n",
+					"    StructField('dropoff_latitude', FloatType()),\n",
+					"    StructField(label, FloatType()),\n",
+					"    StructField('hour', FloatType()),\n",
+					"    StructField('year', IntegerType()),\n",
+					"    StructField('month', IntegerType()),\n",
+					"    StructField('day', FloatType()),\n",
+					"    StructField('day_of_week', FloatType()),\n",
+					"    StructField('is_weekend', FloatType()),\n",
+					"])\n",
+					"features = [ x.name for x in schema if x.name != label ]\n",
+					"\n",
+					"# You need to update them to your real paths!\n",
+					"dataRoot = os.getenv(\"DATA_ROOT\", \"/data\")\n",
+					"train_path = dataRoot + \"/taxi/csv/train\"\n",
+					"eval_path = dataRoot + \"/taxi/csv/test\"\n",
+					"\n",
+					"data_format = 'csv'\n",
+					"has_header = 'true'\n",
+					"if data_format == 'csv':\n",
+					"    train_data = reader.schema(schema).option('header',has_header).csv(train_path)\n",
+					"    trans_data = reader.schema(schema).option('header',has_header).csv(eval_path)\n",
+					"else :\n",
+					"    train_data = reader.load(train_path)\n",
+					"    trans_data = reader.load(eval_path)"
+				],
+				"execution_count": 3
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"Note on CPU version, vectorization is required before fitting data to regressor, which means you need to assemble all feature columns into one column.\n",
+					"\n",
+					"```Python\n",
+					"def vectorize(data_frame):\n",
+					"    to_floats = [ col(x.name).cast(FloatType()) for x in data_frame.schema ]\n",
+					"    return (VectorAssembler()\n",
+					"        .setInputCols(features)\n",
+					"        .setOutputCol('features')\n",
+					"        .transform(data_frame.select(to_floats))\n",
+					"        .select(col('features'), col(label)))\n",
+					"\n",
+					"train_data = vectorize(train_data)\n",
+					"trans_data = vectorize(trans_data)\n",
+					"```"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"#### Create a XGBoostRegressor"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"params = { \n",
+					"    \"tree_method\": \"gpu_hist\",\n",
+					"    \"grow_policy\": \"depthwise\",\n",
+					"    \"num_workers\": 1,\n",
+					"    \"use_gpu\": \"true\",\n",
+					"}\n",
+					"params['features_col'] = features\n",
+					"params['label_col'] = label\n",
+					"    \n",
+					"regressor = SparkXGBRegressor(**params)"
+				],
+				"execution_count": 4
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"The parameter `num_workers` should be set to the number of GPUs in Spark cluster for GPU version, while for CPU version it is usually equal to the number of the CPU cores.\n",
+					"\n",
+					"Concerning the tree method, GPU version only supports `gpu_hist` currently, while `hist` is designed and used here for CPU training.\n",
+					"\n",
+					"An example of CPU classifier:\n",
+					"```\n",
+					"classifier = SparkXGBClassifier(\n",
+					"  feature_col=features,\n",
+					"  label_col=label,  \n",
+					"  num_workers=1024,\n",
+					"  use_gpu=False,\n",
+					")\n",
+					"```"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"#### Train the Data with Benchmark"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"scrolled": true
+				},
+				"source": [
+					"def with_benchmark(phrase, action):\n",
+					"    start = time()\n",
+					"    result = action()\n",
+					"    end = time()\n",
+					"    print('{} takes {} seconds'.format(phrase, round(end - start, 2)))\n",
+					"    return result\n",
+					"model = with_benchmark('Training', lambda: regressor.fit(train_data))"
+				],
+				"execution_count": 5
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"#### Save and Reload the Model"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"model.write().overwrite().save(dataRoot + '/model/taxi')"
+				],
+				"execution_count": 6
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"loaded_model = SparkXGBRegressorModel().load(dataRoot + '/model/taxi')"
+				],
+				"execution_count": 7
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"#### Transformation and Show Result Sample"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"scrolled": false
+				},
+				"source": [
+					"def transform():\n",
+					"    result = loaded_model.transform(trans_data).cache()\n",
+					"    result.foreachPartition(lambda _: None)\n",
+					"    return result\n",
+					"result = with_benchmark('Transformation', transform)\n",
+					"result.select('vendor_id', 'passenger_count', 'trip_distance', label, 'prediction').show(5)"
+				],
+				"execution_count": 8
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"Note on CPU version: You cannot `select` the feature columns after vectorization. So please use `result.show(5)` instead."
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"#### Evaluation"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"scrolled": true
+				},
+				"source": [
+					"accuracy = with_benchmark(\n",
+					"    'Evaluation',\n",
+					"    lambda: RegressionEvaluator().setLabelCol(label).evaluate(result))\n",
+					"print('RMSE is ' + str(accuracy))"
+				],
+				"execution_count": 9
+			},
+			{
+				"cell_type": "markdown",
+				"source": [
+					"#### Stop"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"spark.stop()"
+				],
+				"execution_count": 10
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					""
+				]
+			}
+		]
+	}
+}

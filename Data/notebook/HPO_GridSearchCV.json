@@ -1,0 +1,2560 @@
+{
+	"name": "HPO_GridSearchCV",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "347305ad-9f89-41fe-8381-743a97a68134"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "python"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "xTlApJHhcaXl"
+				},
+				"source": [
+					"# Lending Tree Loan Status - GridSearchCV"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "YVZSGOovcSYV"
+				},
+				"source": [
+					"# Set Up Environment for Spark"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "InYtmHYylxH3"
+				},
+				"source": [
+					"## Colab"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "a14ZKnvXEBZC",
+					"outputId": "c7a4e558-86ae-4569-a644-5a8e402ab120"
+				},
+				"source": [
+					"from google.colab import drive \n",
+					"drive.mount('/content/drive')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "QULkYKkN47wi",
+					"outputId": "343779f9-12c4-44ac-a321-ef73e2d7b8fe"
+				},
+				"source": [
+					"%cd /content/drive/MyDrive/Spark/"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "exlpzAH447wk"
+				},
+				"source": [
+					"# Set up environment for Spark\n",
+					"!apt-get install openjdk-8-jdk-headless -qq > /dev/null"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "5zIO9VQ747wm"
+				},
+				"source": [
+					"!wget -q https://archive.apache.org/dist/spark/spark-3.3.0/spark-3.3.0-bin-hadoop3.tgz"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "GCPM3e_F47wo"
+				},
+				"source": [
+					"!tar xf spark-3.3.0-bin-hadoop3.tgz"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "lRFFz8-O47wq"
+				},
+				"source": [
+					"# Set your spark folder to your system path environment. \n",
+					"import os\n",
+					"os.environ['JAVA_HOME'] = '/usr/lib/jvm/java-8-openjdk-amd64'\n",
+					"os.environ['SPARK_HOME'] = '/content/drive/MyDrive/Spark/spark-3.3.0-bin-hadoop3'"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "JXgF3B_EEBZP",
+					"outputId": "cbb1ded5-e460-47e7-8898-a08916efe401"
+				},
+				"source": [
+					"# Install findspark using pip\n",
+					"!pip install -q findspark\n",
+					"!pip install -U pyspark==3.3\n",
+					"import findspark\n",
+					"findspark.init()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/",
+						"height": 221
+					},
+					"id": "o4drF-SjEBZS",
+					"outputId": "a8a111d3-9385-4661-cae3-7e63fe9b4b75"
+				},
+				"source": [
+					"# Pyspark Session for Colab\n",
+					"from pyspark.sql import SparkSession\n",
+					"spark = SparkSession.builder\\\n",
+					"        .master('local')\\\n",
+					"        .appName('Colab')\\\n",
+					"        .config('spark.driver.memory', '24g')\\\n",
+					"        .config('spark.executor.pyspark.memory', '18g')\\\n",
+					"        .config('spark.executor.cores', '4')\\\n",
+					"        .config('spark.python.worker.memory', '18g')\\\n",
+					"        .config('spark.sql.execution.arrow.pyspark.enabled', 'True')\\\n",
+					"        .config('spark.sql.debug.maxToStringFields', '1000')\\\n",
+					"        .config('spark.sql.autoBroadcastJoinThreshold', '-1')\\\n",
+					"        .config('spark.ui.port', '4050')\\\n",
+					"        .getOrCreate()\n",
+					"\n",
+					"spark"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "_boXodIwl5RP"
+				},
+				"source": [
+					"## Paperspace Gradient"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "WuzH3OO59L4u"
+				},
+				"source": [
+					"# Install Java JRE/JDK in terminal\n",
+					"apt update\n",
+					"apt install default-jre\n",
+					"apt install default-jdk"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"execution": {
+						"iopub.execute_input": "2022-09-14T22:41:18.558493Z",
+						"iopub.status.busy": "2022-09-14T22:41:18.558381Z",
+						"iopub.status.idle": "2022-09-14T22:41:22.106403Z",
+						"shell.execute_reply": "2022-09-14T22:41:22.105914Z",
+						"shell.execute_reply.started": "2022-09-14T22:41:18.558479Z"
+					},
+					"id": "xFQyTPoYa4rA",
+					"outputId": "40e819c9-30f5-49c7-9e52-f87d5d18c556"
+				},
+				"source": [
+					"# Install findspark using pip\n",
+					"!pip install -q findspark\n",
+					"!pip install -U pyspark==3.3\n",
+					"import findspark\n",
+					"findspark.init()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/",
+						"height": 222
+					},
+					"execution": {
+						"iopub.execute_input": "2022-09-16T15:32:46.334025Z",
+						"iopub.status.busy": "2022-09-16T15:32:46.332716Z",
+						"iopub.status.idle": "2022-09-16T15:32:49.696446Z",
+						"shell.execute_reply": "2022-09-16T15:32:49.69584Z",
+						"shell.execute_reply.started": "2022-09-16T15:32:46.334Z"
+					},
+					"id": "8USbkr7vPGBq",
+					"outputId": "093e13e5-fcaf-4ffd-c800-0755878cc969"
+				},
+				"source": [
+					"# Pyspark Session for Paperspace with more RAM & CPU cores available\n",
+					"# driver.memory=35g & executor.pyspark.memory=28 for some\n",
+					"from pyspark.sql import SparkSession\n",
+					"spark = SparkSession.builder\\\n",
+					"        .master('local')\\\n",
+					"        .appName('Paperspace')\\\n",
+					"        .config('spark.driver.memory', '38g')\\\n",
+					"        .config('spark.executor.pyspark.memory', '32g')\\\n",
+					"        .config('spark.executor.cores', '4')\\\n",
+					"        .config('spark.python.worker.memory', '32g')\\\n",
+					"        .config('spark.sql.execution.arrow.pyspark.enabled', 'True')\\\n",
+					"        .config('spark.sql.debug.maxToStringFields', '1000')\\\n",
+					"        .config('spark.sql.autoBroadcastJoinThreshold', '-1')\\\n",
+					"        .config('spark.ui.port', '4050')\\\n",
+					"        .getOrCreate()\n",
+					"\n",
+					"spark"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "7MZZD4FkvMYM"
+				},
+				"source": [
+					"# Remove warnings\n",
+					"spark.sparkContext.setLogLevel('ERROR')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "mzEE-fcNYc5r",
+					"outputId": "8e0a97eb-7771-4844-ac69-b81b787461f2",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"!pip install --upgrade mlflow \n",
+					"!pip install hyperopt\n",
+					"import random\n",
+					"import warnings\n",
+					"import numpy as np\n",
+					"from pyspark.sql.functions import col, round\n",
+					"from pyspark.sql.types import IntegerType, FloatType\n",
+					"from pyspark.ml.feature import VectorAssembler, MinMaxScaler, StandardScaler\n",
+					"from pyspark.ml import Pipeline\n",
+					"from pyspark.ml.classification import LogisticRegression, LinearSVC\n",
+					"from pyspark.ml.classification import DecisionTreeClassifier\n",
+					"from pyspark.ml.classification import RandomForestClassifier, GBTClassifier\n",
+					"from pyspark.ml.tuning import ParamGridBuilder, CrossValidator\n",
+					"from pyspark.ml.evaluation import BinaryClassificationEvaluator\n",
+					"from pyspark.ml.evaluation import MulticlassClassificationEvaluator\n",
+					"from pyspark.mllib.evaluation import BinaryClassificationMetrics\n",
+					"from hyperopt import fmin, tpe, hp, Trials, STATUS_OK\n",
+					"from hyperopt.pyll import scope\n",
+					"import time\n",
+					"from datetime import datetime, timedelta\n",
+					"from timeit import default_timer as timer\n",
+					"try:\n",
+					"  import mlflow.pyspark.ml\n",
+					"  mlflow.pyspark.ml.autolog()\n",
+					"except:\n",
+					"  print(f'Your version of MLflow ({mlflow.__version__}) does not support pyspark.ml for autologging. To use autologging, upgrade your MLflow client version or use Databricks Runtime for ML 8.3 or above.')\n",
+					"warnings.filterwarnings('ignore')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "zxq23AoWjaF5"
+				},
+				"source": [
+					"# Set seed \n",
+					"seed_value = 42\n",
+					"os.environ['SparkML_HPO'] = str(seed_value)\n",
+					"random.seed(seed_value)\n",
+					"np.random.seed(seed_value)"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "Vu6FTxoSPNmk"
+				},
+				"source": [
+					"# Upsampling - Oversample Minority Class "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "e5-G8VmkR7ys"
+				},
+				"source": [
+					"## Read Data and View Schema"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "8vqi0lRLrNED",
+					"outputId": "43167949-b8ab-42c1-d29f-f7c12881dabe",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"trainDF = spark.read.csv('/content/drive/MyDrive/LoanStatus/Data/trainDF_US.csv',\n",
+					"                         header=True, inferSchema=True).cache()\n",
+					"print('\\nTrain Schema')\n",
+					"trainDF.printSchema()\n",
+					"\n",
+					"testDF = spark.read.csv('/content/drive/MyDrive/LoanStatus/Data/testDF_US.csv',\n",
+					"                        header=True, inferSchema=True).cache()\n",
+					"print('\\nTest Schema')\n",
+					"testDF.printSchema()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "O0PjiUDG3MQw"
+				},
+				"source": [
+					"## Set up Vector Assembler, Scalers and Evaluators"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "g2XHymcqV05p"
+				},
+				"source": [
+					"# Define features and label for train data\n",
+					"features = trainDF.columns[0: len(trainDF.columns) - 1]\n",
+					"trainDF = trainDF.select(col('loan_status').alias('label'), *features)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "VhMCrT8GV05r"
+				},
+				"source": [
+					"# VectorAssembler \n",
+					"vecAssembler = VectorAssembler(inputCols=features, \n",
+					"                               outputCol='unscaledFeatures', \n",
+					"                               handleInvalid='skip')  \n",
+					"\n",
+					"# Transform train data\n",
+					"trainDF = vecAssembler.transform(trainDF)  "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "7bJpMRdpV05t"
+				},
+				"source": [
+					"# Define features and label for test data \n",
+					"features = testDF.columns[0: len(testDF.columns) - 1]\n",
+					"testDF = testDF.select(col('loan_status').alias('label'), *features)\n",
+					"\n",
+					"# Transform test data\n",
+					"testDF = vecAssembler.transform(testDF)  "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "cwGtrsjnZv6Q"
+				},
+				"source": [
+					"# MinMaxScaler\n",
+					"mmScaler = MinMaxScaler(inputCol='unscaledFeatures', \n",
+					"                        outputCol='scaledFeatures',\n",
+					"                        min=0, max=1)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "WKxgewL6m383"
+				},
+				"source": [
+					"# Standard scaler\n",
+					"stdScaler = StandardScaler(inputCol='unscaledFeatures', \n",
+					"                           outputCol='scaledFeatures', \n",
+					"                           withStd=True, \n",
+					"                           withMean=False)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "MhmgcEb8nxTD"
+				},
+				"source": [
+					"# Define model evaluation\n",
+					"evaluator_auroc = BinaryClassificationEvaluator(labelCol='label', \n",
+					"                                                metricName='areaUnderROC')\n",
+					"\n",
+					"evaluator_acc = MulticlassClassificationEvaluator(labelCol='label', \n",
+					"                                                  metricName='accuracy')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "FlOTo9wjsR8F",
+					"outputId": "dbac843e-00e9-48aa-c87f-31c685ffdaf2"
+				},
+				"source": [
+					"# Change directory to write mlruns\n",
+					"%cd /content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "DnCXrETyQIf9"
+				},
+				"source": [
+					"## Grid Search"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "ck9fUO83ZQpd"
+				},
+				"source": [
+					"### Logistic Regression "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "-InA5Y6zZQpi"
+				},
+				"source": [
+					"# Set up pipeline\n",
+					"model = LogisticRegression(labelCol='label', \n",
+					"                           featuresCol='scaledFeatures', \n",
+					"                           family='binomial')\n",
+					"\t\t\t\t\t\t\n",
+					"pipeline_lr_hpo = Pipeline(stages=[stdScaler, model])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "xz7lGyoQZQpm"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder()\n",
+					"            .addGrid(model.regParam, [0.01, 0.1, 1.0])\n",
+					"            .addGrid(model.elasticNetParam, [0.0, 0.5, 1.0])\n",
+					"            .addGrid(model.maxIter, [500, 1000])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "8Uk6LccVZQpo"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_lr_hpo, \n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "hBSQ6EUHZQpq",
+					"outputId": "9dda4288-394c-4603-a736-25f33c0807cc"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO\n",
+					"pipelineModel_lr_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# # Save best model\n",
+					"lr_grid = pipelineModel_lr_hpo.bestModel\n",
+					"lr_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_lr_us_hpo_grid')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "ZILKZcVMZQpt",
+					"outputId": "bb737ce9-bdf9-494e-93f8-eefdb114dda9"
+				},
+				"source": [
+					"# Find best parameters\n",
+					"print(pipelineModel_lr_hpo.getEstimatorParamMaps()[np.argmax(pipelineModel_lr_hpo.avgMetrics)])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "o_oef0WnZQpv",
+					"outputId": "816d7650-4c91-4f5f-e42a-c76c9b2c2c4f",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_lr_hpo.avgMetrics, \n",
+					"         pipelineModel_lr_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "Xb1tnUQuKnr8",
+					"outputId": "72ac6717-b758-46b1-a63c-3a276f740992"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_lr = pipelineModel_lr_hpo.transform(testDF) \n",
+					"\n",
+					"lr_auroc = evaluator_auroc.evaluate(prediction_lr)\n",
+					"print('GridSearchCV: Logistic Regression')\n",
+					"print('Area under ROC curve: %g' % (lr_auroc))\n",
+					"print('Test Error: %g ' % (1.0 - lr_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_lr)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "VJVaEeixZQpy",
+					"outputId": "1fe79ac3-12d4-45ef-935e-c8c5bdd2a19d",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_lr_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "0SWe6L10ZQp2",
+					"outputId": "9d733b85-dd93-4c17-9e19-62aff836f3ce",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Find best model and params\n",
+					"bestPipeline = pipelineModel_lr_hpo\n",
+					"bestModel = bestPipeline.stages[-1]\n",
+					"bestParams = bestModel.extractParamMap()\n",
+					"print(bestPipeline)\n",
+					"print('\\n')\n",
+					"print(bestModel)\n",
+					"print('\\n')\n",
+					"print(bestParams)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "4P5pg1G1ZQp4",
+					"outputId": "5566319a-e285-42bc-ab96-8e10471ca3ee"
+				},
+				"source": [
+					"# Find best model and params\n",
+					"best_mod = pipelineModel_lr_hpo\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"\n",
+					"best_reg = sane_dict['regParam']\n",
+					"best_elastic_net = sane_dict['elasticNetParam']\n",
+					"best_max_iter = sane_dict['maxIter']\n",
+					"print(best_reg)\n",
+					"print(best_elastic_net)\n",
+					"print(best_max_iter)"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "I7PzAFouZQp5"
+				},
+				"source": [
+					"### LinearSVC "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "CaOldvv5ZQp7"
+				},
+				"source": [
+					"# Set up pipeline\n",
+					"model = LinearSVC(featuresCol='scaledFeatures', \n",
+					"                  labelCol='label')\n",
+					"\n",
+					"pipeline_lsvc_hpo = Pipeline(stages=[stdScaler, model])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "b22n5SXTZQp7"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder()\n",
+					"            .addGrid(model.regParam, [0.0, 0.01, 0.1, 1.0])\n",
+					"            .addGrid(model.tol, [1e-7, 1e-6, 1e-5])\n",
+					"            .addGrid(model.maxIter, [100, 300])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "VMJLgHWgZQp8"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_lsvc_hpo,\n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "597ATcQWZQp9",
+					"outputId": "147e9d6d-a6e3-4da7-e5aa-ef2653628f4c"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO \n",
+					"pipelineModel_lsvc_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# Save best model\n",
+					"lsvc_grid = pipelineModel_lsvc_hpo.bestModel\n",
+					"lsvc_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_lsvc_us_hpo_grid')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "6HlCR9CPZQp9",
+					"outputId": "52d15256-67a6-4074-96c9-53443fc06994"
+				},
+				"source": [
+					"# Find best parameters\n",
+					"print(pipelineModel_lsvc_hpo.getEstimatorParamMaps()[np.argmax(pipelineModel_lsvc_hpo.avgMetrics)])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "8nZh-bHPZQp-",
+					"outputId": "d954a99a-de06-4e79-eab8-949bce31ff9b",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_lsvc_hpo.avgMetrics, \n",
+					"         pipelineModel_lsvc_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "NCHqrXV_JVIZ",
+					"outputId": "14d233fa-8709-46d5-9838-dbf6909197a2"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_lsvc = pipelineModel_lsvc_hpo.transform(testDF) \n",
+					"\n",
+					"lsvc_auroc = evaluator_auroc.evaluate(prediction_lsvc)\n",
+					"print('GridSearchCV: LinearSVC')\n",
+					"print('Area under ROC curve: %g' % (lsvc_auroc))\n",
+					"print('Test Error: %g' % (1.0 - lsvc_auroc))\n",
+					"print('Accuracy: ', evaluator_acc.evaluate(prediction_lsvc)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "v5pK3zRkZQp_",
+					"outputId": "4db52a3f-0719-4c3b-c1b1-958433969269",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_lsvc_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "aFSXd_PnZQp_",
+					"outputId": "f2bcfbbb-ad97-43e3-8c1b-85e40da75241",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Find best model and params\n",
+					"bestPipeline = pipelineModel_lsvc_hpo.bestModel\n",
+					"bestModel = bestPipeline.stages[-1]\n",
+					"bestParams = bestModel.extractParamMap()\n",
+					"print(bestPipeline)\n",
+					"print('\\n')\n",
+					"print(bestModel)\n",
+					"print('\\n')\n",
+					"print(bestParams)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "5F95Rfj-ZQqA",
+					"outputId": "18380a82-3025-4dd4-9dad-2fd58ffe9a67"
+				},
+				"source": [
+					"# Find best params\n",
+					"best_mod = pipelineModel_lsvc_hpo.bestModel\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"sane_dict"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "1LIMQ7CwPz6Q"
+				},
+				"source": [
+					"### Decision Tree "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "pL6XjQFezOsD"
+				},
+				"source": [
+					"# Set up pipeline \n",
+					"model = DecisionTreeClassifier(labelCol='label', \n",
+					"                               featuresCol='unscaledFeatures', \n",
+					"                               impurity='gini',\n",
+					"                               seed=seed_value)\n",
+					"\t\t\t\t\t\n",
+					"pipeline_dt_hpo = Pipeline(stages=[model])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "sd1b623szOsF"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder() \n",
+					"            .addGrid(model.maxDepth, [5, 10, 15])\n",
+					"            .addGrid(model.maxBins, [32, 64])\n",
+					"            .addGrid(model.impurity, ['gini', 'entropy'])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "V_Eq0keSzOsG"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_dt_hpo,\n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "vVSoH95vypI0",
+					"outputId": "254d2e1e-220c-4e9a-de34-e9eab94cfe4b"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO\n",
+					"pipelineModel_dt_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# Save best model\n",
+					"dt_grid = pipelineModel_dt_hpo.bestModel\n",
+					"dt_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_dt_us_hpo_grid')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "KNrSj_mLypI2",
+					"outputId": "3c465920-1e07-41e4-d706-04503602c493",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_dt_hpo.avgMetrics, \n",
+					"         pipelineModel_dt_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "mHKzChgaypI3",
+					"outputId": "bc4da272-080a-49ed-8b88-fc23c011962f"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_dt = pipelineModel_dt_hpo.transform(testDF) \n",
+					"\n",
+					"dt_auroc = evaluator_auroc.evaluate(prediction_dt)\n",
+					"print('GridSearchCV: Decision Tree')\n",
+					"print('Area under ROC curve: %g' % (dt_auroc))\n",
+					"print('Test Error: %g '% (1.0 - dt_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_dt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "3X0nEQsgypI4",
+					"outputId": "2754920b-e728-4f63-a09a-c9d6f6e4119f",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_dt_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "C1OQluLQypI4",
+					"outputId": "eb93edac-6043-41ab-aa82-9e67176f62df"
+				},
+				"source": [
+					"# Find best model and params\n",
+					"best_mod = pipelineModel_dt_hpo.bestModel\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"sane_dict"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "5FfLWa8dD7Nw"
+				},
+				"source": [
+					"#### More Params"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "cwxfzyEiUKkO"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder() \n",
+					"            .addGrid(model.maxDepth, [5, 10, 15, 20, 25, 30])\n",
+					"            .addGrid(model.maxBins, [16, 32, 64, 128])\n",
+					"            .addGrid(model.impurity, ['gini', 'entropy'])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "ljihtuYIUKkO"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_dt_hpo,\n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "DSRNRnnyNp-U",
+					"outputId": "7242afb6-ec7d-437d-c19c-874b7359b4e5"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO\n",
+					"pipelineModel_dt_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# Save best model\n",
+					"dt_grid = pipelineModel_dt_hpo.bestModel\n",
+					"dt_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_dt_us_hpo_grid_moreParams')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "szI4c2JJnmXz",
+					"outputId": "0419721b-d4f1-43fa-fb48-155fc721f476",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_dt_hpo.avgMetrics, \n",
+					"         pipelineModel_dt_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "i5b2TM00nmX1",
+					"outputId": "33c5985b-68df-4256-ca66-24e57c92648e"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_dt = pipelineModel_dt_hpo.transform(testDF) \n",
+					"\n",
+					"dt_auroc = evaluator_auroc.evaluate(prediction_dt)\n",
+					"print('GridSearchCV: Decision Tree')\n",
+					"print('Area under ROC curve: %g' % (dt_auroc))\n",
+					"print('Test Error: %g '% (1.0 - dt_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_dt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "8BOXmvvdnmX2",
+					"outputId": "a89c0cec-783d-4af4-9cdd-7e6122e8cc00",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_dt_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "tadxHi8FnmX3",
+					"outputId": "e9244ebc-1de7-4b41-ffa2-5c5d2bb859f1"
+				},
+				"source": [
+					"# Find best model and params\n",
+					"best_mod = pipelineModel_dt_hpo.bestModel\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"sane_dict"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "vM11bEj_P7YY"
+				},
+				"source": [
+					"### Random Forest"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "rKBEIwMiSwkN"
+				},
+				"source": [
+					"# Set up pipeline \n",
+					"model = RandomForestClassifier(labelCol='label', \n",
+					"                               featuresCol='unscaledFeatures',\n",
+					"                               seed=seed_value)\n",
+					"\t\t\t\t\t\t\n",
+					"pipeline_rf_hpo = Pipeline(stages=[model])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "fBQ5J7M6SwkO"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder() \n",
+					"            .addGrid(model.maxDepth, [10, 15])\n",
+					"            .addGrid(model.maxBins, [32, 64])\n",
+					"            .addGrid(model.numTrees, [10, 30])\n",
+					"            .addGrid(model.impurity, ['gini', 'entropy'])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "51fPL6p2SwkO"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_rf_hpo,\n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "7gdnkUnNN4_u",
+					"outputId": "94fc87b7-2877-4890-fda6-64abd1433021"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO \n",
+					"pipelineModel_rf_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# Save best model\n",
+					"rf_grid = pipelineModel_rf_hpo.bestModel\n",
+					"rf_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_rf_us_hpo_grid')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "Df8CjJZPM8I1",
+					"outputId": "884e6492-69ff-473b-bd44-3cfe43c51877"
+				},
+				"source": [
+					"# Find best parameters\n",
+					"print(pipelineModel_rf_hpo.getEstimatorParamMaps()[np.argmax(pipelineModel_rf_hpo.avgMetrics)])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "xtiEpg8tM8I2",
+					"outputId": "ac9a99c5-0cff-49ad-9bc2-c8f2d6418bc0",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_rf_hpo.avgMetrics, \n",
+					"         pipelineModel_rf_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "w83H2W-4M8I2",
+					"outputId": "32a1f089-1109-4072-e9aa-c86ea7710098"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_rf = pipelineModel_rf_hpo.transform(testDF) \n",
+					"\n",
+					"rf_auroc = evaluator_auroc.evaluate(prediction_rf)\n",
+					"print('GridSearchCV: Random Forest')\n",
+					"print('Area under ROC curve: %g' % (rf_auroc))\n",
+					"print('Test Error: %g ' % (1.0 - rf_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_rf)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "qMPrRfMqM8I3",
+					"outputId": "2af44d01-cc23-4050-ba13-636ab2dd7131",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_rf_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "ek4fvkpyM8I4",
+					"outputId": "f8920723-81f3-4a22-c9d1-12d26e3a81a3"
+				},
+				"source": [
+					"# Find best model params\n",
+					"best_mod = pipelineModel_rf_hpo.bestModel\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"sane_dict"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "bbvVm6IwM8I4",
+					"outputId": "43ed046c-5b84-48bd-f8b4-b013452b7f08"
+				},
+				"source": [
+					"# Find best model params\n",
+					"best_impurity = sane_dict['impurity']\n",
+					"best_numTrees = sane_dict['numTrees']\n",
+					"best_maxBins = sane_dict['maxBins']\n",
+					"best_maxDepth = sane_dict['maxDepth']\n",
+					"print(best_impurity)\n",
+					"print(best_numTrees) \n",
+					"print(best_maxBins)\n",
+					"print(best_maxDepth)"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "Y4hnFOfhQbFM"
+				},
+				"source": [
+					"### Gradient Boosted Trees"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "az6pO_bjHXnB"
+				},
+				"source": [
+					"# Set up pipeline\n",
+					"model = GBTClassifier(labelCol='label', \n",
+					"                      featuresCol='unscaledFeatures',\n",
+					"                      seed=seed_value)\n",
+					"\t\t\t\t\t\t\n",
+					"pipeline_gbt_hpo = Pipeline(stages=[model])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "45WQS7OkHXnC"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder() \n",
+					"            .addGrid(model.maxDepth, [5, 10, 15])\n",
+					"            .addGrid(model.maxBins, [32, 64])\n",
+					"            .addGrid(model.maxIter, [10])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "RHMtmYKGHXnC"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_gbt_hpo,\n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "xi65IsYkO0eM",
+					"outputId": "2a46ae8a-28f4-4b62-dfaf-6aacfab16b76"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO\n",
+					"pipelineModel_gbt_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# Save best model\n",
+					"gbt_grid = pipelineModel_gbt_hpo.bestModel\n",
+					"gbt_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_gbt_us_hpo_grid')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "MlUTUo5ZOQWC",
+					"outputId": "7f3eeff0-96f3-4833-bea0-2190b9ab7943"
+				},
+				"source": [
+					"# Find best parameters\n",
+					"print(pipelineModel_gbt_hpo.getEstimatorParamMaps()[np.argmax(pipelineModel_gbt_hpo.avgMetrics)])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "aX-sjWXhOQWC",
+					"outputId": "362be700-3f7b-4f23-d721-434bd62a2481",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_gbt_hpo.avgMetrics, \n",
+					"         pipelineModel_gbt_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "wTLeB9UnOQWD",
+					"outputId": "5dddd2ee-5890-4020-c03f-9b84edb20ee8"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_gbt = pipelineModel_gbt_hpo.transform(testDF) \n",
+					"\n",
+					"gbt_auroc = evaluator_auroc.evaluate(prediction_gbt)\n",
+					"print('GridSearchCV: Gradient Boosted Trees')\n",
+					"print('Area under ROC curve: %g' % (gbt_auroc))\n",
+					"print('Test Error: %g ' % (1.0 - gbt_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "Dmkt2-hvOQWD",
+					"outputId": "df20cdd4-861a-4dff-efb0-db960faabe50",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_gbt_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "_RKBJDOjOQWF",
+					"outputId": "968acf15-df9a-4ec1-9c6f-0e2f08bf5b82"
+				},
+				"source": [
+					"best_mod = pipelineModel_gbt_hpo.bestModel\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"sane_dict"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "AkGcRZadQj0t"
+				},
+				"source": [
+					"# SMOTE - Split Over Upsampling "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "FrpLEgGnQqkQ"
+				},
+				"source": [
+					"## Read Data and View Schema"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "BiGZY0sDRIuF",
+					"outputId": "1740aaac-9bde-4f9c-ff35-b2d984f7b3f7",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"trainDF = spark.read.csv('/content/drive/MyDrive/LoanStatus/Data/trainDF_SMOTE.csv',\n",
+					"                         header=True, inferSchema=True).cache()\n",
+					"trainDF = trainDF \\\n",
+					"  .withColumn('loan_amnt', trainDF['loan_amnt'].cast(IntegerType())) \\\n",
+					"  .withColumn('revol_bal', trainDF['revol_bal'].cast(IntegerType())) \\\n",
+					"  .withColumn('term_ 60 months', trainDF['term_ 60 months'].cast(IntegerType())) \\\n",
+					"  .withColumn('grade_B', trainDF['grade_B'].cast(IntegerType())) \\\n",
+					"  .withColumn('grade_C', trainDF['grade_C'].cast(IntegerType())) \\\n",
+					"  .withColumn('grade_D', trainDF['grade_D'].cast(IntegerType())) \\\n",
+					"  .withColumn('home_ownership_MORTGAGE', trainDF['home_ownership_MORTGAGE'].cast(IntegerType())) \\\n",
+					"  .withColumn('home_ownership_OWN', trainDF['home_ownership_OWN'].cast(IntegerType())) \\\n",
+					"  .withColumn('home_ownership_RENT', trainDF['home_ownership_RENT'].cast(IntegerType())) \\\n",
+					"  .withColumn('verification_status_Source Verified', trainDF['verification_status_Source Verified'].cast(IntegerType())) \\\n",
+					"  .withColumn('verification_status_Verified', trainDF['verification_status_Verified'].cast(IntegerType())) \\\n",
+					"  .withColumn('purpose_credit_card', trainDF['purpose_credit_card'].cast(IntegerType())) \\\n",
+					"  .withColumn('initial_list_status_w', trainDF['initial_list_status_w'].cast(IntegerType())) \\\n",
+					"  .withColumn('application_type_Joint App', trainDF['application_type_Joint App'].cast(IntegerType())) \\\n",
+					"  .withColumn('disbursement_method_DirectPay', trainDF['disbursement_method_DirectPay'].cast(IntegerType())) \n",
+					"print('\\nTrain Schema')\n",
+					"trainDF.printSchema()\n",
+					"\n",
+					"testDF = spark.read.csv('/content/drive/MyDrive/LoanStatus/Data/testDF_SMOTE.csv',\n",
+					"                        header=True, inferSchema=True).cache()\n",
+					"print('\\nTest Schema')\n",
+					"testDF.printSchema()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "HbCDa2I2R8bd"
+				},
+				"source": [
+					"## Set up Vector Assembler"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "wDb26XbT50dL"
+				},
+				"source": [
+					"# Define features and label for train data\n",
+					"features = trainDF.columns[0: len(trainDF.columns) - 1]\n",
+					"trainDF = trainDF.select(col('loan_status').alias('label'), *features)\n",
+					"\n",
+					"# Transform train data\n",
+					"trainDF = vecAssembler.transform(trainDF)  "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "sFWxtIfq50dU"
+				},
+				"source": [
+					"# Define features and label for test data \n",
+					"features = testDF.columns[0: len(testDF.columns) - 1]\n",
+					"testDF = testDF.select(col('loan_status').alias('label'), *features)\n",
+					"\n",
+					"# Transform test data\n",
+					"testDF = vecAssembler.transform(testDF)  "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "dRaDx7idsyPI",
+					"outputId": "dbac843e-00e9-48aa-c87f-31c685ffdaf2"
+				},
+				"source": [
+					"# Change directory to write mlruns\n",
+					"%cd /content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "-xNO0aW0Ru1Z"
+				},
+				"source": [
+					"## Grid Search"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "2pOAamCeaz-a"
+				},
+				"source": [
+					"### Logistic Regression"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "mlGYCYWOaz-b"
+				},
+				"source": [
+					"# Set up pipeline\n",
+					"model = LogisticRegression(labelCol='label', \n",
+					"                           featuresCol='scaledFeatures', \n",
+					"                           family='binomial')\n",
+					"\t\t\t\t\t\t\n",
+					"pipeline_lr_hpo = Pipeline(stages=[stdScaler, model])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "vhdRnYRxaz-c"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder()\n",
+					"            .addGrid(model.regParam, [0.01, 0.1, 1.0])\n",
+					"            .addGrid(model.elasticNetParam, [0.0, 0.5, 1.0])\n",
+					"            .addGrid(model.maxIter, [500, 1000])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "a0CIiHaqaz-d"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_lr_hpo, \n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "oFNq53z5az-e",
+					"outputId": "abc849c1-e32d-45b5-bfb2-65b321b0bac8"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO\n",
+					"pipelineModel_lr_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# Save best model\n",
+					"lr_grid = pipelineModel_lr_hpo.bestModel\n",
+					"lr_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_lr_smote_hpo_grid')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "cVPtHkjAaz-f",
+					"outputId": "bbea8401-1253-4efc-f9e1-bd0af70b64ef"
+				},
+				"source": [
+					"# Find best parameters\n",
+					"print(pipelineModel_lr_hpo.getEstimatorParamMaps()[np.argmax(pipelineModel_lr_hpo.avgMetrics)])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "qOfilVG_az-g",
+					"outputId": "1a97e8dd-72bb-4a02-ab02-b2761de64ee0",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_lr_hpo.avgMetrics, \n",
+					"         pipelineModel_lr_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "Df-IhcmuLQIb",
+					"outputId": "82bb955e-32cf-4993-8ac3-a3146782f784"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_lr = pipelineModel_lr_hpo.transform(testDF) \n",
+					"\n",
+					"lr_auroc = evaluator_auroc.evaluate(prediction_lr)\n",
+					"print('GridSearchCV: Logistic Regression')\n",
+					"print('Area under ROC curve: %g' % (lr_auroc))\n",
+					"print('Test Error: %g ' % (1.0 - lr_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_lr)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "jieA6P46az-i",
+					"outputId": "1a54a866-00ea-4f15-81a0-5454604f2d94",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_lr_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "T8e9UN39az-j",
+					"outputId": "30ebdd02-6832-40ae-b414-d3154010f1fc",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Find best model and params\n",
+					"bestPipeline = pipelineModel_lr_hpo.bestModel\n",
+					"bestModel = bestPipeline.stages[-1]\n",
+					"bestParams = bestModel.extractParamMap()\n",
+					"print(bestPipeline)\n",
+					"print('\\n')\n",
+					"print(bestModel)\n",
+					"print('\\n')\n",
+					"print(bestParams)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "nf0re9ecaz-j",
+					"outputId": "9b45948b-319e-40cc-a97b-c68f439997b9"
+				},
+				"source": [
+					"# Find best model and params\n",
+					"best_mod = pipelineModel_lr_hpo.bestModel\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"\n",
+					"best_reg = sane_dict['regParam']\n",
+					"best_elastic_net = sane_dict['elasticNetParam']\n",
+					"best_max_iter = sane_dict['maxIter']\n",
+					"print(best_reg)\n",
+					"print(best_elastic_net)\n",
+					"print(best_max_iter)"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "1l9nyJp2az-l"
+				},
+				"source": [
+					"### LinearSVC"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "FdkoGPKwaz-m"
+				},
+				"source": [
+					"# Set up pipeline\n",
+					"model = LinearSVC(featuresCol='scaledFeatures', \n",
+					"                  labelCol='label')\n",
+					"\n",
+					"pipeline_lsvc_hpo = Pipeline(stages=[stdScaler, model])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "TvhdhRNxaz-m"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder()\n",
+					"            .addGrid(model.regParam, [0.0, 0.01, 0.1, 1.0])\n",
+					"            .addGrid(model.tol, [1e-7, 1e-6, 1e-5])\n",
+					"            .addGrid(model.maxIter, [100])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "gCqCKfzDaz-m"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_lsvc_hpo,\n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "AWqMojHMx0aJ",
+					"outputId": "aca1d364-4132-4137-c745-1707ad6469d6"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO\n",
+					"pipelineModel_lsvc_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# Save best model\n",
+					"lsvc_grid = pipelineModel_lsvc_hpo.bestModel\n",
+					"lsvc_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_lsvc_smote_hpo_grid')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "4WiMhvbMaz-o",
+					"outputId": "7a7ad6ac-fad9-4f61-bdd9-26b799e8a294"
+				},
+				"source": [
+					"# Find best parameters\n",
+					"print(pipelineModel_lsvc_hpo.getEstimatorParamMaps()[np.argmax(pipelineModel_lsvc_hpo.avgMetrics)])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "i6fftVzNaz-o",
+					"outputId": "f010e123-b4a5-4da1-c28a-a15d099377a1",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_lsvc_hpo.avgMetrics, \n",
+					"         pipelineModel_lsvc_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "T2ClOSt5LfkC",
+					"outputId": "d70c22f8-77f1-4b40-d19e-f0f9ed32646d"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_lsvc = pipelineModel_lsvc_hpo.transform(testDF) \n",
+					"\n",
+					"lsvc_auroc = evaluator_auroc.evaluate(prediction_lsvc)\n",
+					"print('GridSearchCV: LinearSVC')\n",
+					"print('Area under ROC curve: %g' % (lsvc_auroc))\n",
+					"print('Test Error: %g' % (1.0 - lsvc_auroc))\n",
+					"print('Accuracy: ', evaluator_acc.evaluate(prediction_lsvc)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "br-FxnCdaz-p",
+					"outputId": "bde16235-f813-44cc-b395-0e27de364581",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_lsvc_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "ZjRmCvfzaz-p",
+					"outputId": "8cb99f4b-1409-484a-c7cf-79eb93f24ff1",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Find best model and params\n",
+					"bestPipeline = pipelineModel_lsvc_hpo.bestModel\n",
+					"bestModel = bestPipeline.stages[-1]\n",
+					"bestParams = bestModel.extractParamMap()\n",
+					"print(bestPipeline)\n",
+					"print('\\n')\n",
+					"print(bestModel)\n",
+					"print('\\n')\n",
+					"print(bestParams)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "X-lNlghzaz-q",
+					"outputId": "326c0ee4-76c3-4033-e489-72bcad23174b"
+				},
+				"source": [
+					"# Find best model and params\n",
+					"best_mod = pipelineModel_lsvc_hpo.bestModel\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"sane_dict"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "pA3vVqvfXA3p"
+				},
+				"source": [
+					"### Decision Tree"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "e2cElshKXA3r"
+				},
+				"source": [
+					"# Set up pipeline \n",
+					"model = DecisionTreeClassifier(labelCol='label', \n",
+					"                               featuresCol='unscaledFeatures', \n",
+					"                               impurity='gini',\n",
+					"                               seed=seed_value)\n",
+					"\t\t\t\t\t\t\n",
+					"pipeline_dt_hpo = Pipeline(stages=[model])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "qBe7yl75XA3t"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder() \n",
+					"            .addGrid(model.maxDepth, [5, 10, 15])\n",
+					"            .addGrid(model.maxBins, [32, 64])\n",
+					"            .addGrid(model.impurity, ['gini', 'entropy'])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "5U_2ZxefXA3u"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_dt_hpo,\n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "TxCV0XtaegUM",
+					"outputId": "ca61d35a-cc4e-450c-9d04-6a9cb3b91da1"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO\n",
+					"pipelineModel_dt_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# Save best model\n",
+					"dt_grid = pipelineModel_dt_hpo.bestModel\n",
+					"dt_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_dt_smote_hpo_grid')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "bVlY_BkGegUM",
+					"outputId": "767fc04e-bd24-4033-ce14-7e56ad22ed9f"
+				},
+				"source": [
+					"# Find best parameters\n",
+					"print(pipelineModel_dt_hpo.getEstimatorParamMaps()[np.argmax(pipelineModel_dt_hpo.avgMetrics)])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "VfYYN_1TegUN",
+					"outputId": "87b942a4-1088-4110-997c-b9e9a547f3a9",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_dt_hpo.avgMetrics, \n",
+					"         pipelineModel_dt_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "oLLLkWG9egUO",
+					"outputId": "878a7c28-36ab-45fb-f040-e08c01a4fbe7"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_dt = pipelineModel_dt_hpo.transform(testDF) \n",
+					"\n",
+					"dt_auroc = evaluator_auroc.evaluate(prediction_dt)\n",
+					"print('GridSearchCV: Decision Tree')\n",
+					"print('Area under ROC curve: %g' % (dt_auroc))\n",
+					"print('Test Error: %g '% (1.0 - dt_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_dt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "_5wM4mkLegUO",
+					"outputId": "116dbbe4-f4d5-4991-82e7-f2881a0d45b7",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_dt_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "QuC-_fP9egUP",
+					"outputId": "91cd291e-6243-461a-e258-d82c39241d78"
+				},
+				"source": [
+					"# Find best model and params\n",
+					"bestPipeline = pipelineModel_dt_hpo.bestModel\n",
+					"bestPipeline.stages "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "DG2Ms9UbegUQ",
+					"outputId": "de498ff4-6513-4ac5-978a-ad519952271d"
+				},
+				"source": [
+					"# Find best model and params\n",
+					"best_mod = pipelineModel_dt_hpo.bestModel\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"sane_dict"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "6v6EbXQ6p-6W"
+				},
+				"source": [
+					"#### More Params"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "Jgy2DADiqA0d"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder() \n",
+					"            .addGrid(model.maxDepth, [5, 10, 15, 20, 25, 30])\n",
+					"            .addGrid(model.maxBins, [16, 32, 64, 128])\n",
+					"            .addGrid(model.impurity, ['gini', 'entropy'])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "bLOZMwBQqA0d"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_dt_hpo,\n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "cIQluELP_bZt",
+					"outputId": "49fdfe05-0e69-4898-dff0-e746c970cdcf"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO\n",
+					"pipelineModel_dt_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# Save best model\n",
+					"dt_grid = pipelineModel_dt_hpo.bestModel\n",
+					"dt_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_dt_smote_hpo_grid_moreParams')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "EvSrxkNgJ6P0",
+					"outputId": "bc5f241a-e8ad-4dbc-feb2-ed108569af38"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_dt = pipelineModel_dt_hpo.transform(testDF) \n",
+					"\n",
+					"dt_auroc = evaluator_auroc.evaluate(prediction_dt)\n",
+					"print('GridSearchCV: Decision Tree')\n",
+					"print('Area under ROC curve: %g' % (dt_auroc))\n",
+					"print('Test Error: %g '% (1.0 - dt_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_dt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "4VnIwVUDqA0e",
+					"outputId": "41d8c69a-7e84-4c53-cfd5-df9bc721b058",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_dt_hpo.avgMetrics, \n",
+					"         pipelineModel_dt_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "Ig1SG0BLqA0f",
+					"outputId": "a78a31b0-e4db-4f19-fcc0-3fc303c7d0b3",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_dt_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "efIrMz5uqA0g",
+					"outputId": "bb2454ca-f89c-4690-f873-ce0db672ae30"
+				},
+				"source": [
+					"# Find best model and params\n",
+					"best_mod = pipelineModel_dt_hpo.bestModel\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"sane_dict"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "dmnRRkjXbyzh"
+				},
+				"source": [
+					"### Random Forest"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "skJbMIkSbyzi"
+				},
+				"source": [
+					"# Set up pipeline\n",
+					"model = RandomForestClassifier(labelCol='label', \n",
+					"                               featuresCol='unscaledFeatures',\n",
+					"                               seed=seed_value)\n",
+					"\t\t\t\t\t\t\n",
+					"# Set up pipeline\n",
+					"pipeline_rf_hpo = Pipeline(stages=[model])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "MYu54iIObyzk"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder() \n",
+					"            .addGrid(model.maxDepth, [10, 15])\n",
+					"            .addGrid(model.maxBins, [32, 64])\n",
+					"            .addGrid(model.numTrees, [10, 30])\n",
+					"            .addGrid(model.impurity, ['gini', 'entropy'])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "r2MWsaa1byzl"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_rf_hpo,\n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "uG03gXGdPM7r",
+					"outputId": "bc15ba37-c074-4b5a-b3e1-9d8a873dc91a"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO\n",
+					"pipelineModel_rf_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# Save best model\n",
+					"rf_grid = pipelineModel_rf_hpo.bestModel\n",
+					"rf_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_rf_smote_hpo_grid')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "4MQrzqFLegUS",
+					"outputId": "6ac0a8ba-bf35-46a7-f2d2-fafd881ffc79"
+				},
+				"source": [
+					"# Find best parameters\n",
+					"print(pipelineModel_rf_hpo.getEstimatorParamMaps()[np.argmax(pipelineModel_rf_hpo.avgMetrics)])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "FFQkgsl3egUT",
+					"outputId": "b628b657-a41a-4702-8d45-18aa70762a46",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_rf_hpo.avgMetrics, \n",
+					"         pipelineModel_rf_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "m64cTMWhegUT",
+					"outputId": "26935a7e-2ad6-4895-86f5-d1c3d3c0deea"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_rf = pipelineModel_rf_hpo.transform(testDF) \n",
+					"\n",
+					"rf_auroc = evaluator_auroc.evaluate(prediction_rf)\n",
+					"print('GridSearchCV: Random Forest')\n",
+					"print('Area under ROC curve: %g' % (rf_auroc))\n",
+					"print('Test Error: %g ' % (1.0 - rf_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_rf)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "H-O0cGGHegUU",
+					"outputId": "e2cfe424-6499-47a9-c0c8-243cf6575e9a",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_rf_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "pBSGttU4egUU",
+					"outputId": "399424f3-d2cb-4844-c95d-c1c9052f21b0"
+				},
+				"source": [
+					"# Find best model and params\n",
+					"best_mod = pipelineModel_rf_hpo.bestModel\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"sane_dict"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "POUz7KtZegUV",
+					"outputId": "e2091b99-c9bd-4c33-85b0-ac0d008ed210"
+				},
+				"source": [
+					"# Find best model and params\n",
+					"best_impurity = sane_dict['impurity']\n",
+					"best_numTrees = sane_dict['numTrees']\n",
+					"best_maxBins = sane_dict['maxBins']\n",
+					"best_maxDepth = sane_dict['maxDepth']\n",
+					"print(best_impurity)\n",
+					"print(best_numTrees) \n",
+					"print(best_maxBins)\n",
+					"print(best_maxDepth)"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "fuWax7tsRTFG"
+				},
+				"source": [
+					"### Gradient Boosted Trees"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "2PkmUst_UKkz"
+				},
+				"source": [
+					"# Set up pipeline\n",
+					"model = GBTClassifier(labelCol='label', \n",
+					"                      featuresCol='unscaledFeatures',\n",
+					"                      seed=seed_value)\t\t\t\t\n",
+					"\n",
+					"pipeline_gbt_hpo = Pipeline(stages=[model])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "ZqRZcPSWUKk0"
+				},
+				"source": [
+					"# Create parameter grid\n",
+					"paramGrid = (ParamGridBuilder() \n",
+					"            .addGrid(model.maxDepth, [5, 10, 15])\n",
+					"            .addGrid(model.maxBins, [32, 64])\n",
+					"            .addGrid(model.maxIter, [10])\n",
+					"            .build())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "uJ0vXK9iUKk0"
+				},
+				"source": [
+					"# Define type of cross-validation\n",
+					"cv = CrossValidator(estimator=pipeline_gbt_hpo,\n",
+					"                    estimatorParamMaps=paramGrid,\n",
+					"                    evaluator=evaluator_auroc,\n",
+					"                    numFolds=5, parallelism=5)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "b44FVABnPXPI",
+					"outputId": "29ededac-8c6c-4670-d523-4f96f0d8ad43"
+				},
+				"source": [
+					"# Start timer for experiment\n",
+					"search_time_start = time.time()\n",
+					"\n",
+					"# Run HPO\n",
+					"pipelineModel_gbt_hpo = cv.fit(trainDF)\n",
+					"\n",
+					"# End timer for experiment\n",
+					"print('Time to perform GridSearchCV:', time.time() - search_time_start)\n",
+					"\n",
+					"# Save best model\n",
+					"gbt_grid = pipelineModel_gbt_hpo.bestModel\n",
+					"gbt_grid.save('/content/drive/MyDrive/LoanStatus/Python/Models/ML/SparkML/Models/GridSearchCV/pipelineModel_gbt_smote_hpo_grid')"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "T62elqlhegUX",
+					"outputId": "b79f46a7-2171-4dea-fa6a-fa90fef45d04"
+				},
+				"source": [
+					"# Find best parameters\n",
+					"print(pipelineModel_gbt_hpo.getEstimatorParamMaps()[np.argmax(pipelineModel_gbt_hpo.avgMetrics)])"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "29-11fdsegUX",
+					"outputId": "5cd6c5ba-8643-47d4-f204-a2edc9ee3549",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# View all results (AUROC) by each params\n",
+					"list(zip(pipelineModel_gbt_hpo.avgMetrics, \n",
+					"         pipelineModel_gbt_hpo.getEstimatorParamMaps()))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "4hwaX36legUX",
+					"outputId": "df699b1e-04f0-4406-ae29-069cc2a4d4e2"
+				},
+				"source": [
+					"# Predict and find AUROC, test error and accuracy\n",
+					"prediction_gbt = pipelineModel_gbt_hpo.transform(testDF) \n",
+					"\n",
+					"gbt_auroc = evaluator_auroc.evaluate(prediction_gbt)\n",
+					"print('GridSearchCV: Gradient Boosted Trees')\n",
+					"print('Area under ROC curve: %g' % (gbt_auroc))\n",
+					"print('Test Error: %g ' % (1.0 - gbt_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "l3aGUKP9egUX",
+					"outputId": "f75424bb-1797-46e5-c2eb-c936154f0e23",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"pipelineModel_gbt_hpo.bestModel.stages[-1].extractParamMap()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "zyKhNzB6egUY",
+					"outputId": "a4f9d510-67a1-416d-958a-118f442ca884",
+					"scrolled": true,
+					"tags": []
+				},
+				"source": [
+					"# Find best model and params\n",
+					"bestPipeline = pipelineModel_gbt_hpo.bestModel\n",
+					"bestModel = bestPipeline.stages[-1]\n",
+					"bestParams = bestModel.extractParamMap()\n",
+					"print(bestPipeline)\n",
+					"print('\\n')\n",
+					"print(bestModel)\n",
+					"print('\\n')\n",
+					"print(bestParams)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "CKp5vc4fegUY",
+					"outputId": "382acc14-dd30-4130-e2c0-315c780e5c0a"
+				},
+				"source": [
+					"# Find best model and params\n",
+					"best_mod = pipelineModel_gbt_hpo.bestModel\n",
+					"param_dict = best_mod.stages[-1].extractParamMap()\n",
+					"sane_dict = {}\n",
+					"for k, v in param_dict.items():\n",
+					"  sane_dict[k.name] = v\n",
+					"sane_dict"
+				]
+			}
+		]
+	}
+}

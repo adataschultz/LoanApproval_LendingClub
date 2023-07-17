@@ -1,0 +1,10 @@
+{
+	"name": "synapse-ws-sql--spark-loanstatus-trade-east",
+	"properties": {
+		"privateLinkResourceId": "/subscriptions/a134465f-eb15-4297-b902-3c97d4c81838/resourceGroups/aschultzdata/providers/Microsoft.Synapse/workspaces/spark-loanstatus-trade-east",
+		"groupId": "sql",
+		"fqdns": [
+			"spark-loanstatus-trade-east.8fc4a915-0244-45a5-a2cb-6e194fc5efe3.sql.azuresynapse.net"
+		]
+	}
+}

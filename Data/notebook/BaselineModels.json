@@ -1,0 +1,1522 @@
+{
+	"name": "BaselineModels",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "64787dbc-e6d9-4114-93b1-3dcf3b3af298"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "python"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "xTlApJHhcaXl"
+				},
+				"source": [
+					"# Lending Tree Loan Status - Baseline Models"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "YVZSGOovcSYV"
+				},
+				"source": [
+					"# Set Up Environment for Spark"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "a4raW63KgBzW"
+				},
+				"source": [
+					"## Paperspace Gradient\n",
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "WuzH3OO59L4u"
+				},
+				"source": [
+					"# Install Java JRE/JDK in terminal\n",
+					"apt update\n",
+					"apt install default-jre\n",
+					"apt install default-jdk"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"execution": {
+						"iopub.execute_input": "2022-09-14T22:41:18.558493Z",
+						"iopub.status.busy": "2022-09-14T22:41:18.558381Z",
+						"iopub.status.idle": "2022-09-14T22:41:22.106403Z",
+						"shell.execute_reply": "2022-09-14T22:41:22.105914Z",
+						"shell.execute_reply.started": "2022-09-14T22:41:18.558479Z"
+					},
+					"id": "xFQyTPoYa4rA",
+					"outputId": "40e819c9-30f5-49c7-9e52-f87d5d18c556"
+				},
+				"source": [
+					"# Install findspark using pip\n",
+					"!pip install -q findspark\n",
+					"!pip install -U pyspark==3.3\n",
+					"import findspark\n",
+					"findspark.init()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/",
+						"height": 222
+					},
+					"execution": {
+						"iopub.execute_input": "2022-09-14T22:41:22.107999Z",
+						"iopub.status.busy": "2022-09-14T22:41:22.107453Z",
+						"iopub.status.idle": "2022-09-14T22:41:25.529835Z",
+						"shell.execute_reply": "2022-09-14T22:41:25.529434Z",
+						"shell.execute_reply.started": "2022-09-14T22:41:22.107975Z"
+					},
+					"id": "8USbkr7vPGBq",
+					"outputId": "093e13e5-fcaf-4ffd-c800-0755878cc969"
+				},
+				"source": [
+					"# Pyspark Session for Paperspace with more RAM & CPU cores available\n",
+					"# driver.memory=35g & executor.pyspark.memory=28 for some\n",
+					"from pyspark.sql import SparkSession\n",
+					"spark = SparkSession.builder\\\n",
+					"        .master('local')\\\n",
+					"        .appName('Paperspace')\\\n",
+					"        .config('spark.driver.memory', '38g')\\\n",
+					"        .config('spark.executor.pyspark.memory', '32g')\\\n",
+					"        .config('spark.executor.cores', '4')\\\n",
+					"        .config('spark.python.worker.memory', '32g')\\\n",
+					"        .config('spark.sql.execution.arrow.pyspark.enabled', 'True')\\\n",
+					"        .config('spark.sql.debug.maxToStringFields', '1000')\\\n",
+					"        .config('spark.sql.autoBroadcastJoinThreshold', '-1')\\\n",
+					"        .config('spark.ui.port', '4050')\\\n",
+					"        .getOrCreate()\n",
+					"\n",
+					"spark"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "7MZZD4FkvMYM"
+				},
+				"source": [
+					"# Remove warnings\n",
+					"spark.sparkContext.setLogLevel('ERROR')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "DH0iOYr7IR5E"
+				},
+				"source": [
+					"# Install & Import Packages and Set Seed"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "mzEE-fcNYc5r",
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"outputId": "08d82a05-0712-49dc-e872-8742186a8d86"
+				},
+				"source": [
+					"!pip install --upgrade mlflow \n",
+					"!pip install hyperopt\n",
+					"import os\n",
+					"import random\n",
+					"import numpy as np\n",
+					"import warnings\n",
+					"from pyspark.sql.functions import col, round\n",
+					"from pyspark.sql.types import IntegerType, FloatType\n",
+					"from pyspark.ml.feature import VectorAssembler, MinMaxScaler, StandardScaler\n",
+					"from pyspark.ml import Pipeline\n",
+					"from pyspark.ml.classification import LogisticRegression, LinearSVC\n",
+					"from pyspark.ml.classification import DecisionTreeClassifier\n",
+					"from pyspark.ml.classification import RandomForestClassifier, GBTClassifier\n",
+					"from pyspark.ml.evaluation import BinaryClassificationEvaluator\n",
+					"from pyspark.ml.evaluation import MulticlassClassificationEvaluator\n",
+					"from pyspark.mllib.evaluation import BinaryClassificationMetrics\n",
+					"import time\n",
+					"from datetime import datetime, timedelta\n",
+					"from timeit import default_timer as timer\n",
+					"import pandas as pd\n",
+					"import matplotlib.pyplot as plt\n",
+					"import seaborn as sns\n",
+					"try:\n",
+					"  import mlflow.pyspark.ml\n",
+					"  mlflow.pyspark.ml.autolog()\n",
+					"except:\n",
+					"  print(f'Your version of MLflow ({mlflow.__version__}) does not support pyspark.ml for autologging. To use autologging, upgrade your MLflow client version or use Databricks Runtime for ML 8.3 or above.')\n",
+					"warnings.filterwarnings('ignore')\n",
+					"my_dpi = 96 "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "zxq23AoWjaF5"
+				},
+				"source": [
+					"# Set seed \n",
+					"seed_value = 42\n",
+					"os.environ['SparkML_HPO'] = str(seed_value)\n",
+					"random.seed(seed_value)\n",
+					"np.random.seed(seed_value)"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "Vu6FTxoSPNmk"
+				},
+				"source": [
+					"# Upsampling - Oversample Minority Class "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "e5-G8VmkR7ys"
+				},
+				"source": [
+					"## Read Data and View Schema"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "8vqi0lRLrNED",
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"outputId": "ae408d69-c308-4af5-8910-9de1d2b22376"
+				},
+				"source": [
+					"trainDF = spark.read.csv('/notebooks/LoanStatus/Data/trainDF_US.csv',\n",
+					"                         header=True, inferSchema=True).cache()\n",
+					"print('\\nTrain Schema')\n",
+					"trainDF.printSchema()\n",
+					"\n",
+					"testDF = spark.read.csv('/notebooks/LoanStatus/Data/testDF_US.csv', \n",
+					"                        header=True, inferSchema=True).cache()\n",
+					"print('\\nTest Schema')\n",
+					"testDF.printSchema()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "IIMlmrv5IkT1"
+				},
+				"source": [
+					"## Set up Vector Assembler, Scalers and Evaluators"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "g2XHymcqV05p"
+				},
+				"source": [
+					"# Define features and label for train data\n",
+					"features = trainDF.columns[0: len(trainDF.columns) - 1]\n",
+					"trainDF = trainDF.select(col('loan_status').alias('label'), *features)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "VhMCrT8GV05r"
+				},
+				"source": [
+					"# VectorAssembler \n",
+					"vecAssembler = VectorAssembler(inputCols=features, \n",
+					"                               outputCol='unscaledFeatures', \n",
+					"                               handleInvalid='skip')  \n",
+					"\n",
+					"# Transform train data\n",
+					"trainDF = vecAssembler.transform(trainDF)  "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "7bJpMRdpV05t"
+				},
+				"source": [
+					"# Define features and label for test data \n",
+					"features = testDF.columns[0: len(testDF.columns) - 1]\n",
+					"testDF = testDF.select(col('loan_status').alias('label'), *features)\n",
+					"\n",
+					"# Transform test data\n",
+					"testDF = vecAssembler.transform(testDF)  "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "9Dlfq642IkT5"
+				},
+				"source": [
+					"# MinMaxScaler\n",
+					"mmScaler = MinMaxScaler(inputCol='unscaledFeatures', \n",
+					"                        outputCol='scaledFeatures',\n",
+					"                        min=0, max=1)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "WpfegOq7IkT6"
+				},
+				"source": [
+					"# Standard scaler\n",
+					"stdScaler = StandardScaler(inputCol='unscaledFeatures', \n",
+					"                           outputCol='scaledFeatures', \n",
+					"                           withStd=True, \n",
+					"                           withMean=False)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"id": "MhmgcEb8nxTD"
+				},
+				"source": [
+					"# Define model evaluation\n",
+					"evaluator_auroc = BinaryClassificationEvaluator(labelCol='label', \n",
+					"                                                metricName='areaUnderROC')\n",
+					"\n",
+					"evaluator_acc = MulticlassClassificationEvaluator(labelCol='label', \n",
+					"                                                  metricName='accuracy')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "dfc6zT4Sg7RU"
+				},
+				"source": [
+					"## Logistic Regression"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:25:44.913576Z",
+						"iopub.status.busy": "2022-10-10T01:25:44.913473Z",
+						"iopub.status.idle": "2022-10-10T01:30:08.117089Z",
+						"shell.execute_reply": "2022-10-10T01:30:08.116554Z",
+						"shell.execute_reply.started": "2022-10-10T01:25:44.913564Z"
+					},
+					"id": "m-TKfHs-YXr4",
+					"outputId": "3b1fe6cd-941e-4205-caed-c1d1626b6653"
+				},
+				"source": [
+					"# Set up logistic regression pipeline\n",
+					"lr = LogisticRegression(family='binomial', \n",
+					"                        labelCol='label', \n",
+					"                        featuresCol='scaledFeatures',  \n",
+					"                        regParam=0.0, \n",
+					"                        elasticNetParam=0.0, \n",
+					"                        maxIter=100)\n",
+					"\n",
+					"search_time_start = time.time()\n",
+					"pipeline_lr = Pipeline(stages=[mmScaler, lr])\n",
+					"pipelineModel_lr = pipeline_lr.fit(trainDF)\n",
+					"print('Time to fit baseline model:', time.time() - search_time_start)\n",
+					"\n",
+					"Path = '/notebooks/LoanStatus/Python/ML/SparkML/Models/Baseline/baselineModel_lr_us'\n",
+					"pipelineModel_lr.save(Path)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"id": "fSTSIAV8RoNf",
+					"outputId": "0b631c1d-0e57-4a4e-d85b-c4f8d13e8e11"
+				},
+				"source": [
+					"# Predict on model\n",
+					"prediction_lr = pipelineModel_lr.transform(testDF)\n",
+					"\n",
+					"lr_auroc = evaluator_auroc.evaluate(prediction_lr)\n",
+					"print('Baseline: LogisticRegression')\n",
+					"print('Area under ROC curve: %g' % (lr_auroc))\n",
+					"print('Test Error: %g' % (1.0 - lr_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_lr)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:31:21.153204Z",
+						"iopub.status.busy": "2022-10-10T01:31:21.15272Z",
+						"iopub.status.idle": "2022-10-10T01:31:22.150996Z",
+						"shell.execute_reply": "2022-10-10T01:31:22.150534Z",
+						"shell.execute_reply.started": "2022-10-10T01:31:21.153179Z"
+					},
+					"id": "uClcqZUDYXr9",
+					"outputId": "3dcdc3c8-a62d-4326-f921-eb1b76f08846"
+				},
+				"source": [
+					"# Set path to save results\n",
+					"save_results_to = '/notebooks/LoanStatus/Python/ML/SparkML/Models/Baseline/Results/'\n",
+					"\n",
+					"# Extract info from pipeline\n",
+					"lr_info = pipelineModel_lr.stages[-1]\n",
+					"trainingSummary = lr_info.summary\n",
+					"\n",
+					"# Beta coefficients\n",
+					"beta = np.sort(lr_info.coefficients)\n",
+					"plt.plot(beta)\n",
+					"plt.ylabel('Beta Coefficients')\n",
+					"plt.savefig(save_results_to + 'Logistic_Baseline_US_betaCoef.png', \n",
+					"            dpi=my_dpi*10, bbox_inches='tight')\n",
+					"plt.show()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:31:22.154083Z",
+						"iopub.status.busy": "2022-10-10T01:31:22.153952Z",
+						"iopub.status.idle": "2022-10-10T01:32:15.171996Z",
+						"shell.execute_reply": "2022-10-10T01:32:15.171522Z",
+						"shell.execute_reply.started": "2022-10-10T01:31:22.154067Z"
+					},
+					"id": "VXTh60LxYXr9",
+					"outputId": "a62dfc21-5d27-42d5-b9c5-6cbf3ca55b44"
+				},
+				"source": [
+					"# ROC Curve\n",
+					"roc = trainingSummary.roc.toPandas()\n",
+					"plt.plot(roc['FPR'],roc['TPR'])\n",
+					"plt.ylabel('False Positive Rate')\n",
+					"plt.xlabel('True Positive Rate')\n",
+					"plt.title('ROC Curve')\n",
+					"plt.savefig(save_results_to + 'Logistic_Baseline_US_ROC.png', \n",
+					"            dpi=my_dpi*10, bbox_inches='tight')\n",
+					"plt.show()\n",
+					"print('\\nTraining set areaUnderROC:' + str(trainingSummary.areaUnderROC))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:32:15.173046Z",
+						"iopub.status.busy": "2022-10-10T01:32:15.172908Z",
+						"iopub.status.idle": "2022-10-10T01:32:16.244429Z",
+						"shell.execute_reply": "2022-10-10T01:32:16.244032Z",
+						"shell.execute_reply.started": "2022-10-10T01:32:15.173029Z"
+					},
+					"id": "6yLNQ5czYXr-",
+					"outputId": "3def34e2-bf4a-4fa7-b88d-35b09757ffb8"
+				},
+				"source": [
+					"# Precision Recall Curve\n",
+					"pr = trainingSummary.pr.toPandas()\n",
+					"plt.plot(pr['recall'],pr['precision'])\n",
+					"plt.ylabel('Precision')\n",
+					"plt.xlabel('Recall')\n",
+					"plt.savefig(save_results_to + 'Logistic_Baseline_US_RecallPrecision.png', \n",
+					"            dpi=my_dpi*10, bbox_inches='tight')\n",
+					"plt.show()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "grEBSzzzuKBj"
+				},
+				"source": [
+					"## LinearSVC"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:32:16.252022Z",
+						"iopub.status.busy": "2022-10-10T01:32:16.251896Z",
+						"iopub.status.idle": "2022-10-10T01:34:58.592245Z",
+						"shell.execute_reply": "2022-10-10T01:34:58.591644Z",
+						"shell.execute_reply.started": "2022-10-10T01:32:16.252008Z"
+					},
+					"outputId": "69b5c2aa-6d26-47a3-feba-1673c3a2c008",
+					"id": "4QZUVgFYoG5q"
+				},
+				"source": [
+					"# Set up LinearSVC pipeline\n",
+					"lsvc = LinearSVC(labelCol='label', \n",
+					"                 featuresCol='scaledFeatures', \n",
+					"                 regParam=0.0, \n",
+					"                 tol=1e-5, \n",
+					"                 maxIter=100)\n",
+					"\n",
+					"search_time_start = time.time()\n",
+					"pipeline_lsvc = Pipeline(stages=[stdScaler, lsvc])\n",
+					"pipelineModel_lsvc = pipeline_lsvc.fit(trainDF)\n",
+					"print('Time to fit baseline model:', time.time() - search_time_start)\n",
+					"\n",
+					"Path = '/notebooks/LoanStatus/Python/ML/SparkML/Models/Baseline/baselineModel_lsvc_us'\n",
+					"pipelineModel_lsvc.save(Path)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:34:58.593332Z",
+						"iopub.status.busy": "2022-10-10T01:34:58.59319Z",
+						"iopub.status.idle": "2022-10-10T01:35:08.159024Z",
+						"shell.execute_reply": "2022-10-10T01:35:08.158561Z",
+						"shell.execute_reply.started": "2022-10-10T01:34:58.593313Z"
+					},
+					"id": "QV984L1DnVyd",
+					"outputId": "8b8240de-d435-4f0f-c328-b1b17ecd17d0"
+				},
+				"source": [
+					"# Predict on model\n",
+					"prediction_lsvc = pipelineModel_lsvc.transform(testDF)\n",
+					"\n",
+					"lsvc_auroc = evaluator_auroc.evaluate(prediction_lsvc)\n",
+					"print('Baseline: LinearSVC')\n",
+					"print('Area under ROC curve: %g' % (lsvc_auroc))\n",
+					"print('Test Error: %g' % (1.0 - lsvc_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_lsvc)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:35:08.160115Z",
+						"iopub.status.busy": "2022-10-10T01:35:08.159979Z",
+						"iopub.status.idle": "2022-10-10T01:35:09.121366Z",
+						"shell.execute_reply": "2022-10-10T01:35:09.121025Z",
+						"shell.execute_reply.started": "2022-10-10T01:35:08.1601Z"
+					},
+					"outputId": "4218ebd0-72d3-4fce-dbb6-7bf56eb738d1",
+					"id": "JBm3xTYsoG6B"
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"lsvc_info = pipelineModel_lsvc.stages[-1]\n",
+					"trainingSummary = lsvc_info.summary\n",
+					"\n",
+					"# Beta coefficients\n",
+					"beta = np.sort(lsvc_info.coefficients)\n",
+					"plt.plot(beta)\n",
+					"plt.ylabel('Beta Coefficients')\n",
+					"plt.savefig(save_results_to + 'LinearSVC_Baseline_US_betaCoef.png',\n",
+					"            dpi=my_dpi*10, bbox_inches='tight')\n",
+					"plt.show()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "AY9w3qrcuVL1"
+				},
+				"source": [
+					"## Decision Tree "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:35:09.128089Z",
+						"iopub.status.busy": "2022-10-10T01:35:09.127986Z",
+						"iopub.status.idle": "2022-10-10T01:36:13.31516Z",
+						"shell.execute_reply": "2022-10-10T01:36:13.314718Z",
+						"shell.execute_reply.started": "2022-10-10T01:35:09.128075Z"
+					},
+					"outputId": "4a24d325-a4ca-4823-84bb-075f34c4cc0b",
+					"id": "ERJD1SQ1oqTK"
+				},
+				"source": [
+					"# Set up DecisionTree pipeline\n",
+					"dt = DecisionTreeClassifier(labelCol='label', \n",
+					"                            featuresCol='unscaledFeatures',\n",
+					"                            maxDepth=5,\n",
+					"                            maxBins=16, \n",
+					"                            impurity='gini',\n",
+					"                            seed=seed_value)\n",
+					"\n",
+					"search_time_start = time.time()\n",
+					"pipeline_dt = Pipeline(stages=[dt])\n",
+					"pipelineModel_dt = pipeline_dt.fit(trainDF)\n",
+					"print('Time to fit baseline model:', time.time() - search_time_start)\n",
+					"\n",
+					"Path = '/notebooks/LoanStatus/Python/ML/SparkML/Models/Baseline/baselineModel_dt_us'\n",
+					"pipelineModel_dt.save(Path)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:36:13.316033Z",
+						"iopub.status.busy": "2022-10-10T01:36:13.315899Z",
+						"iopub.status.idle": "2022-10-10T01:36:17.708989Z",
+						"shell.execute_reply": "2022-10-10T01:36:17.708395Z",
+						"shell.execute_reply.started": "2022-10-10T01:36:13.316015Z"
+					},
+					"id": "nAG0VdW7nVyi",
+					"outputId": "c468553d-645b-4c30-a4f0-6c4f753ec521"
+				},
+				"source": [
+					"# Predict on model\n",
+					"prediction_dt = pipelineModel_dt.transform(testDF)\n",
+					"\n",
+					"dt_auroc = evaluator_auroc.evaluate(prediction_dt)\n",
+					"print('Baseline: Decision Tree')\n",
+					"print('Area under ROC curve: %g' % (dt_auroc))\n",
+					"print('Test Error: %g' % (1.0 - dt_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_dt)) "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "vyigAfseurAj"
+				},
+				"source": [
+					"## Random Forest"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:36:17.713534Z",
+						"iopub.status.busy": "2022-10-10T01:36:17.713404Z",
+						"iopub.status.idle": "2022-10-10T01:37:45.98238Z",
+						"shell.execute_reply": "2022-10-10T01:37:45.981865Z",
+						"shell.execute_reply.started": "2022-10-10T01:36:17.71352Z"
+					},
+					"outputId": "45d651da-8f44-4fd0-9550-6cdfa8c85113",
+					"id": "TvsDosYgozg8"
+				},
+				"source": [
+					"# Set up RandomForest pipeline\n",
+					"rf = RandomForestClassifier(labelCol='label', \n",
+					"                            featuresCol='unscaledFeatures',\n",
+					"                            impurity='gini',\n",
+					"                            maxDepth=5,\n",
+					"                            maxBins=32, \n",
+					"                            numTrees=10,\n",
+					"                            seed=seed_value)\n",
+					"\n",
+					"search_time_start = time.time()\n",
+					"pipeline_rf = Pipeline(stages=[rf])\n",
+					"pipelineModel_rf = pipeline_rf.fit(trainDF)\n",
+					"print('Time to fit baseline model:', time.time() - search_time_start)\n",
+					"\n",
+					"Path = '/notebooks/LoanStatus/Python/ML/SparkML/Models/Baseline/baselineModel_rf_us'\n",
+					"pipelineModel_rf.save(Path)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:37:45.983559Z",
+						"iopub.status.busy": "2022-10-10T01:37:45.983429Z",
+						"iopub.status.idle": "2022-10-10T01:37:51.912744Z",
+						"shell.execute_reply": "2022-10-10T01:37:51.91221Z",
+						"shell.execute_reply.started": "2022-10-10T01:37:45.983542Z"
+					},
+					"outputId": "a3a037bb-071c-4819-ca35-7994b964dc86",
+					"id": "zTgZW6DiozhB"
+				},
+				"source": [
+					"# Predict on model\n",
+					"prediction_rf = pipelineModel_rf.transform(testDF)\n",
+					"\n",
+					"rf_auroc = evaluator_auroc.evaluate(prediction_rf)\n",
+					"print('Baseline: Random Forest')\n",
+					"print('Area under ROC curve: %g' % (rf_auroc))\n",
+					"print('Test Error: %g' % (1.0 - rf_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_rf)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:37:51.915342Z",
+						"iopub.status.busy": "2022-10-10T01:37:51.914852Z",
+						"iopub.status.idle": "2022-10-10T01:38:23.96486Z",
+						"shell.execute_reply": "2022-10-10T01:38:23.964359Z",
+						"shell.execute_reply.started": "2022-10-10T01:37:51.915322Z"
+					},
+					"outputId": "a94375a5-8fd2-44a7-9b03-fd7227483a7e",
+					"id": "wcjgvexhozhF"
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"rf_info = pipelineModel_rf.stages[-1]\n",
+					"trainingSummary = rf_info.summary\n",
+					"\n",
+					"# ROC Curve\n",
+					"roc = trainingSummary.roc.toPandas()\n",
+					"plt.plot(roc['FPR'],roc['TPR'])\n",
+					"plt.ylabel('False Positive Rate')\n",
+					"plt.xlabel('True Positive Rate')\n",
+					"plt.title('ROC Curve')\n",
+					"plt.savefig(save_results_to + 'RF_Baseline_US_ROC.png', dpi=my_dpi*10, \n",
+					"            bbox_inches='tight')\n",
+					"\n",
+					"plt.show()\n",
+					"print('\\nTraining set areaUnderROC: ' + str(trainingSummary.areaUnderROC))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:38:23.967369Z",
+						"iopub.status.busy": "2022-10-10T01:38:23.967251Z",
+						"iopub.status.idle": "2022-10-10T01:38:25.046691Z",
+						"shell.execute_reply": "2022-10-10T01:38:25.046344Z",
+						"shell.execute_reply.started": "2022-10-10T01:38:23.967354Z"
+					},
+					"outputId": "4d09956f-ddf5-4b67-9699-74b86d445316",
+					"id": "6P5DD1kZozhI"
+				},
+				"source": [
+					"# Precision Recall Curve\n",
+					"pr = trainingSummary.pr.toPandas()\n",
+					"plt.plot(pr['recall'],pr['precision'])\n",
+					"plt.ylabel('Precision')\n",
+					"plt.xlabel('Recall')\n",
+					"plt.savefig(save_results_to + 'RF_Baseline_US_RecallPrecision.png', \n",
+					"            dpi=my_dpi*10, bbox_inches='tight')\n",
+					"plt.show()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "J9IKeqMzuwNq"
+				},
+				"source": [
+					"## Gradient Boosted Trees"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:38:25.050866Z",
+						"iopub.status.busy": "2022-10-10T01:38:25.050485Z",
+						"iopub.status.idle": "2022-10-10T01:40:36.693224Z",
+						"shell.execute_reply": "2022-10-10T01:40:36.69278Z",
+						"shell.execute_reply.started": "2022-10-10T01:38:25.050849Z"
+					},
+					"outputId": "7c4839f8-4d37-4614-b38a-402524ee3a0e",
+					"id": "HKa-VO7Do9VQ"
+				},
+				"source": [
+					"# Set up GBT pipeline\n",
+					"gbt = GBTClassifier(labelCol='label', \n",
+					"                    featuresCol='unscaledFeatures', \n",
+					"                    maxDepth=5, \n",
+					"                    maxBins=32, \n",
+					"                    maxIter=10,\n",
+					"                    seed=seed_value)\n",
+					"\n",
+					"search_time_start = time.time()\n",
+					"pipeline_gbt = Pipeline(stages=[gbt])\n",
+					"pipelineModel_gbt = pipeline_gbt.fit(trainDF)\n",
+					"print('Time to fit baseline model:', time.time() - search_time_start)\n",
+					"\n",
+					"Path = '/notebooks/LoanStatus/Python/ML/SparkML/Models/Baseline/baselineModel_gbt_us'\n",
+					"pipelineModel_gbt.save(Path)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:40:36.694107Z",
+						"iopub.status.busy": "2022-10-10T01:40:36.693976Z",
+						"iopub.status.idle": "2022-10-10T01:40:41.15867Z",
+						"shell.execute_reply": "2022-10-10T01:40:41.158253Z",
+						"shell.execute_reply.started": "2022-10-10T01:40:36.69409Z"
+					},
+					"outputId": "7ad8a207-ebb7-4527-eec0-499df31ca354",
+					"id": "yjbvp0KQo9VV"
+				},
+				"source": [
+					"# Predict on model\n",
+					"prediction_gbt = pipelineModel_gbt.transform(testDF)\n",
+					"\n",
+					"gbt_auroc = evaluator_auroc.evaluate(prediction_gbt)\n",
+					"print('Baseline: Gradient Boosted Trees')\n",
+					"print('Area under ROC curve: %g' % (gbt_auroc))\n",
+					"print('Test Error: %g' % (1.0 - gbt_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "57aoMGnju0Mh"
+				},
+				"source": [
+					"## Model Metrics"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:40:41.159438Z",
+						"iopub.status.busy": "2022-10-10T01:40:41.159322Z",
+						"iopub.status.idle": "2022-10-10T01:41:24.213591Z",
+						"shell.execute_reply": "2022-10-10T01:41:24.212964Z",
+						"shell.execute_reply.started": "2022-10-10T01:40:41.159424Z"
+					},
+					"id": "EKsl2nvmnVyv",
+					"outputId": "35c3433d-2027-48fc-be8c-40ef07a2e100"
+				},
+				"source": [
+					"print('Upsampling Baseline Models:')\n",
+					"for model in ['prediction_lr', 'prediction_lsvc', 'prediction_dt',\n",
+					"              'prediction_rf', 'prediction_gbt']:\n",
+					"    df = globals()[model]\n",
+					"    \n",
+					"    tp = df[(df.label == 1) & (df.prediction == 1)].count()\n",
+					"    tn = df[(df.label == 0) & (df.prediction == 0)].count()\n",
+					"    fp = df[(df.label == 0) & (df.prediction == 1)].count()\n",
+					"    fn = df[(df.label == 1) & (df.prediction == 0)].count()\n",
+					"    a = ((tp + tn)/df.count())\n",
+					"    \n",
+					"    if(tp + fn == 0.0):\n",
+					"        r = 0.0\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    elif(tp + fp == 0.0):\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = 0.0\n",
+					"    else:\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    \n",
+					"    if(p + r == 0):\n",
+					"        f1 = 0\n",
+					"    else:\n",
+					"        f1 = 2 * ((p * r)/(p + r))\n",
+					"    \n",
+					"    print('\\nModel:', model)\n",
+					"    print('True Positives:', tp)\n",
+					"    print('True Negatives:', tn)\n",
+					"    print('False Positives:', fp)\n",
+					"    print('False Negatives:', fn)\n",
+					"    print('Total:', df.count())\n",
+					"    print('Accuracy:', a)\n",
+					"    print('Recall:', r)\n",
+					"    print('Precision: ', p)\n",
+					"    print('F1 score:', f1)\n",
+					"    print('\\n')"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "d7BLrYd9duGt"
+				},
+				"source": [
+					"# SMOTE - Split Over Upsampling "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "XgBCB2Wxd4uD"
+				},
+				"source": [
+					"## Read Data and View Schema"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"outputId": "65efe9ce-682f-41d6-a3ff-7fffddf89345",
+					"id": "gIPsMjbqRFBl"
+				},
+				"source": [
+					"trainDF = spark.read.csv('/content/drive/MyDrive/LoanStatus/Data/trainDF_SMOTE.csv',\n",
+					"                         header=True, inferSchema=True).cache()\n",
+					"trainDF = trainDF \\\n",
+					"  .withColumn('loan_amnt', trainDF['loan_amnt'].cast(IntegerType())) \\\n",
+					"  .withColumn('revol_bal', trainDF['revol_bal'].cast(IntegerType())) \\\n",
+					"  .withColumn('term_ 60 months', trainDF['term_ 60 months'].cast(IntegerType())) \\\n",
+					"  .withColumn('grade_B', trainDF['grade_B'].cast(IntegerType())) \\\n",
+					"  .withColumn('grade_C', trainDF['grade_C'].cast(IntegerType())) \\\n",
+					"  .withColumn('grade_D', trainDF['grade_D'].cast(IntegerType())) \\\n",
+					"  .withColumn('home_ownership_MORTGAGE', trainDF['home_ownership_MORTGAGE'].cast(IntegerType())) \\\n",
+					"  .withColumn('home_ownership_OWN', trainDF['home_ownership_OWN'].cast(IntegerType())) \\\n",
+					"  .withColumn('home_ownership_RENT', trainDF['home_ownership_RENT'].cast(IntegerType())) \\\n",
+					"  .withColumn('verification_status_Source Verified', trainDF['verification_status_Source Verified'].cast(IntegerType())) \\\n",
+					"  .withColumn('verification_status_Verified', trainDF['verification_status_Verified'].cast(IntegerType())) \\\n",
+					"  .withColumn('purpose_credit_card', trainDF['purpose_credit_card'].cast(IntegerType())) \\\n",
+					"  .withColumn('initial_list_status_w', trainDF['initial_list_status_w'].cast(IntegerType())) \\\n",
+					"  .withColumn('application_type_Joint App', trainDF['application_type_Joint App'].cast(IntegerType())) \\\n",
+					"  .withColumn('disbursement_method_DirectPay', trainDF['disbursement_method_DirectPay'].cast(IntegerType())) \n",
+					"print('\\nTrain Schema')\n",
+					"trainDF.printSchema()\n",
+					"\n",
+					"testDF = spark.read.csv('/content/drive/MyDrive/LoanStatus/Data/testDF_SMOTE.csv',\n",
+					"                        header=True, inferSchema=True).cache()\n",
+					"print('\\nTest Schema')\n",
+					"testDF.printSchema()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "IbInT5E5SIuk"
+				},
+				"source": [
+					"## Set up Vector Assembler"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:41:54.749276Z",
+						"iopub.status.busy": "2022-10-10T01:41:54.749148Z",
+						"iopub.status.idle": "2022-10-10T01:41:54.828092Z",
+						"shell.execute_reply": "2022-10-10T01:41:54.827535Z",
+						"shell.execute_reply.started": "2022-10-10T01:41:54.74926Z"
+					},
+					"id": "4JEDFx5Nt81t"
+				},
+				"source": [
+					"# Define features and label for train data\n",
+					"features = trainDF.columns[0: len(trainDF.columns) - 1]\n",
+					"trainDF = trainDF.select(col('loan_status').alias('label'), *features)\n",
+					"\n",
+					"# Transform train data\n",
+					"trainDF = vecAssembler.transform(trainDF)  "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:41:54.82896Z",
+						"iopub.status.busy": "2022-10-10T01:41:54.82884Z",
+						"iopub.status.idle": "2022-10-10T01:41:54.888315Z",
+						"shell.execute_reply": "2022-10-10T01:41:54.887811Z",
+						"shell.execute_reply.started": "2022-10-10T01:41:54.828944Z"
+					},
+					"id": "puVR0VCFt81w"
+				},
+				"source": [
+					"# Define features and label for test data \n",
+					"features = testDF.columns[0: len(testDF.columns) - 1]\n",
+					"testDF = testDF.select(col('loan_status').alias('label'), *features)\n",
+					"\n",
+					"# Transform test data\n",
+					"testDF = vecAssembler.transform(testDF)  "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "3D7k7759pwKP"
+				},
+				"source": [
+					"## Logistic Regression"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:41:54.892732Z",
+						"iopub.status.busy": "2022-10-10T01:41:54.89228Z",
+						"iopub.status.idle": "2022-10-10T01:44:04.743515Z",
+						"shell.execute_reply": "2022-10-10T01:44:04.743022Z",
+						"shell.execute_reply.started": "2022-10-10T01:41:54.892711Z"
+					},
+					"id": "tBEPvBdnr9Qb",
+					"outputId": "fa7e1980-6083-4007-80cf-098c303a45b9"
+				},
+				"source": [
+					"# Set up logistic regression pipeline\n",
+					"lr = LogisticRegression(family='binomial', \n",
+					"                        labelCol='label', \n",
+					"                        featuresCol='scaledFeatures',  \n",
+					"                        regParam=0.0, \n",
+					"                        elasticNetParam=0.0, \n",
+					"                        maxIter=100)\n",
+					"\n",
+					"search_time_start = time.time()\n",
+					"pipeline_lr = Pipeline(stages=[mmScaler, lr])\n",
+					"pipelineModel_lr = pipeline_lr.fit(trainDF)\n",
+					"print('Time to fit baseline model:', time.time() - search_time_start)\n",
+					"\n",
+					"Path = '/notebooks/LoanStatus/Python/ML/SparkML/Models/Baseline/baselineModel_lr_smote'\n",
+					"pipelineModel_lr.save(Path)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"colab": {
+						"base_uri": "https://localhost:8080/"
+					},
+					"outputId": "4c584842-ffb8-4ab7-fd14-33408bdc4f2b",
+					"id": "Nrxq2AXnSKgM"
+				},
+				"source": [
+					"# Predict on model\n",
+					"prediction_lr = pipelineModel_lr.transform(testDF)\n",
+					"\n",
+					"lr_auroc = evaluator_auroc.evaluate(prediction_lr)\n",
+					"print('Baseline: Logistic Regression')\n",
+					"print('Area under ROC curve: %g' % (lr_auroc))\n",
+					"print('Test Error: %g' % (1.0 - lr_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_lr)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:44:16.078948Z",
+						"iopub.status.busy": "2022-10-10T01:44:16.078357Z",
+						"iopub.status.idle": "2022-10-10T01:44:17.111435Z",
+						"shell.execute_reply": "2022-10-10T01:44:17.110963Z",
+						"shell.execute_reply.started": "2022-10-10T01:44:16.078927Z"
+					},
+					"id": "5QcTOKaxr9Qj",
+					"outputId": "3be5ae6f-5853-4626-a34e-d0c6983a6c3a"
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"lr_info = pipelineModel_lr.stages[-1]\n",
+					"trainingSummary = lr_info.summary\n",
+					"\n",
+					"# Beta coefficients\n",
+					"beta = np.sort(lr_info.coefficients)\n",
+					"plt.plot(beta)\n",
+					"plt.ylabel('Beta Coefficients')\n",
+					"plt.savefig(save_results_to + 'Logistic_Baseline_SMOTE_betaCoef.png', \n",
+					"            dpi=my_dpi*10, bbox_inches='tight')\n",
+					"plt.show()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:44:17.112378Z",
+						"iopub.status.busy": "2022-10-10T01:44:17.112224Z",
+						"iopub.status.idle": "2022-10-10T01:45:12.444413Z",
+						"shell.execute_reply": "2022-10-10T01:45:12.443863Z",
+						"shell.execute_reply.started": "2022-10-10T01:44:17.112359Z"
+					},
+					"id": "h3E8GhcXr9Ql",
+					"outputId": "12a5f731-666d-47ff-fe22-f3e090f2c4a4"
+				},
+				"source": [
+					"# ROC Curve\n",
+					"roc = trainingSummary.roc.toPandas()\n",
+					"plt.plot(roc['FPR'],roc['TPR'])\n",
+					"plt.ylabel('False Positive Rate')\n",
+					"plt.xlabel('True Positive Rate')\n",
+					"plt.title('ROC Curve')\n",
+					"plt.savefig(save_results_to + 'Logistic_Baseline_SMOTE_ROC.png', \n",
+					"            dpi=my_dpi*10, bbox_inches='tight')\n",
+					"plt.show()\n",
+					"print('\\nTraining set areaUnderROC:' + str(trainingSummary.areaUnderROC))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:45:12.445279Z",
+						"iopub.status.busy": "2022-10-10T01:45:12.445145Z",
+						"iopub.status.idle": "2022-10-10T01:45:13.535786Z",
+						"shell.execute_reply": "2022-10-10T01:45:13.535368Z",
+						"shell.execute_reply.started": "2022-10-10T01:45:12.445264Z"
+					},
+					"id": "tY84ihzqr9Qm",
+					"outputId": "96f0bad6-cc2d-4024-af56-cea1c023b0a5"
+				},
+				"source": [
+					"# Precision Recall Curve\n",
+					"pr = trainingSummary.pr.toPandas()\n",
+					"plt.plot(pr['recall'],pr['precision'])\n",
+					"plt.ylabel('Precision')\n",
+					"plt.xlabel('Recall')\n",
+					"plt.savefig(save_results_to + 'Logistic_Baseline_SMOTE_RecallPrecision.png', \n",
+					"            dpi=my_dpi*10, bbox_inches='tight')\n",
+					"plt.show()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "1MvF4mRw0oT8"
+				},
+				"source": [
+					"## LinearSVC"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:45:13.543068Z",
+						"iopub.status.busy": "2022-10-10T01:45:13.542956Z",
+						"iopub.status.idle": "2022-10-10T01:47:35.851498Z",
+						"shell.execute_reply": "2022-10-10T01:47:35.850935Z",
+						"shell.execute_reply.started": "2022-10-10T01:45:13.543055Z"
+					},
+					"outputId": "8d05f681-2e4f-480e-8c35-597d7693a173",
+					"id": "FVvkoVRkpllL"
+				},
+				"source": [
+					"# Set up LinearSVC pipeline\n",
+					"lsvc = LinearSVC(labelCol='label', \n",
+					"                 featuresCol='scaledFeatures', \n",
+					"                 regParam=0.0, \n",
+					"                 tol=1e-5, \n",
+					"                 maxIter=100)\n",
+					"\n",
+					"search_time_start = time.time()\n",
+					"pipeline_lsvc = Pipeline(stages=[stdScaler, lsvc])\n",
+					"pipelineModel_lsvc = pipeline_lsvc.fit(trainDF)\n",
+					"print('Time to fit baseline model:', time.time() - search_time_start)\n",
+					"\n",
+					"Path = '/notebooks/LoanStatus/Python/ML/SparkML/Models/Baseline/baselineModel_lsvc_smote'\n",
+					"pipelineModel_lsvc.save(Path)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:47:35.852592Z",
+						"iopub.status.busy": "2022-10-10T01:47:35.852446Z",
+						"iopub.status.idle": "2022-10-10T01:47:45.719064Z",
+						"shell.execute_reply": "2022-10-10T01:47:45.718662Z",
+						"shell.execute_reply.started": "2022-10-10T01:47:35.852569Z"
+					},
+					"outputId": "f0b7cfc2-06d4-4a8b-8e60-9f8b6d13b3ab",
+					"id": "HVpvD_U3pllS"
+				},
+				"source": [
+					"# Predict on model\n",
+					"prediction_lsvc = pipelineModel_lsvc.transform(testDF)\n",
+					"\n",
+					"lsvc_auroc = evaluator_auroc.evaluate(prediction_lsvc)\n",
+					"print('Baseline: LinearSVC')\n",
+					"print('Area under ROC curve: %g' % (lsvc_auroc))\n",
+					"print('Test Error: %g' % (1.0 - lsvc_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_lsvc)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:47:45.719917Z",
+						"iopub.status.busy": "2022-10-10T01:47:45.719795Z",
+						"iopub.status.idle": "2022-10-10T01:47:46.671335Z",
+						"shell.execute_reply": "2022-10-10T01:47:46.670885Z",
+						"shell.execute_reply.started": "2022-10-10T01:47:45.719902Z"
+					},
+					"outputId": "79709f9a-069c-4247-fefd-d476a864f1d6",
+					"id": "LFO99DrKpllW"
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"lsvc_info = pipelineModel_lsvc.stages[-1]\n",
+					"trainingSummary = lsvc_info.summary\n",
+					"\n",
+					"# Beta coefficients\n",
+					"beta = np.sort(lsvc_info.coefficients)\n",
+					"plt.plot(beta)\n",
+					"plt.ylabel('Beta Coefficients')\n",
+					"plt.savefig(save_results_to + 'LinearSVC_Baseline_SMOTE_betaCoef.png',\n",
+					"            dpi=my_dpi*10, bbox_inches='tight')\n",
+					"plt.show()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "AFVU7WQq0xhw"
+				},
+				"source": [
+					"## Decision Tree "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:47:46.675061Z",
+						"iopub.status.busy": "2022-10-10T01:47:46.674952Z",
+						"iopub.status.idle": "2022-10-10T01:48:54.37475Z",
+						"shell.execute_reply": "2022-10-10T01:48:54.374143Z",
+						"shell.execute_reply.started": "2022-10-10T01:47:46.675049Z"
+					},
+					"outputId": "e5fea863-7c3f-46e0-a081-472c91f8821e",
+					"id": "yDAryR8vqANQ"
+				},
+				"source": [
+					"# Set up DecisionTree pipeline\n",
+					"dt = DecisionTreeClassifier(labelCol='label', \n",
+					"                            featuresCol='unscaledFeatures',\n",
+					"                            maxDepth=5,\n",
+					"                            maxBins=16, \n",
+					"                            impurity='gini',\n",
+					"                            seed=seed_value)\n",
+					"\n",
+					"search_time_start = time.time()\n",
+					"pipeline_dt = Pipeline(stages=[dt])\n",
+					"pipelineModel_dt = pipeline_dt.fit(trainDF)\n",
+					"print('Time to fit baseline model:', time.time() - search_time_start)\n",
+					"\n",
+					"Path = '/notebooks/LoanStatus/Python/ML/SparkML/Models/Baseline/baselineModel_dt_smote'\n",
+					"pipelineModel_dt.save(Path)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:48:54.375801Z",
+						"iopub.status.busy": "2022-10-10T01:48:54.375665Z",
+						"iopub.status.idle": "2022-10-10T01:48:58.21877Z",
+						"shell.execute_reply": "2022-10-10T01:48:58.218353Z",
+						"shell.execute_reply.started": "2022-10-10T01:48:54.375782Z"
+					},
+					"outputId": "76a3d1d4-4e9a-40c1-d088-3b11372ccd2a",
+					"id": "OvMpcQDqqANX"
+				},
+				"source": [
+					"# Predict on model\n",
+					"prediction_dt = pipelineModel_dt.transform(testDF)\n",
+					"\n",
+					"dt_auroc = evaluator_auroc.evaluate(prediction_dt)\n",
+					"print('Baseline: Decision Tree')\n",
+					"print('Area under ROC curve: %g' % (dt_auroc))\n",
+					"print('Test Error: %g' % (1.0 - dt_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_dt)) "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "bFAwifRQ01YJ"
+				},
+				"source": [
+					"## Random Forest"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:48:58.234081Z",
+						"iopub.status.busy": "2022-10-10T01:48:58.233967Z",
+						"iopub.status.idle": "2022-10-10T01:50:28.113201Z",
+						"shell.execute_reply": "2022-10-10T01:50:28.112612Z",
+						"shell.execute_reply.started": "2022-10-10T01:48:58.234068Z"
+					},
+					"outputId": "7ac62826-ee69-4758-973a-30c37f67797c",
+					"id": "MBsN9kv-q20Z"
+				},
+				"source": [
+					"# Set up RandomForest pipeline\n",
+					"rf = RandomForestClassifier(labelCol='label', \n",
+					"                            featuresCol='unscaledFeatures', \n",
+					"                            maxDepth=5,\n",
+					"                            maxBins=32,\n",
+					"                            numTrees=10,\n",
+					"                            impurity='gini',\n",
+					"                            seed=seed_value)\n",
+					"\n",
+					"search_time_start = time.time()\n",
+					"pipeline_rf = Pipeline(stages=[rf])\n",
+					"pipelineModel_rf = pipeline_rf.fit(trainDF)\n",
+					"print('Time to fit baseline model:', time.time() - search_time_start)\n",
+					"\n",
+					"Path = '/notebooks/LoanStatus/Python/ML/SparkML/Models/Baseline/baselineModel_rf_smote'\n",
+					"pipelineModel_rf.save(Path)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:50:28.114378Z",
+						"iopub.status.busy": "2022-10-10T01:50:28.11413Z",
+						"iopub.status.idle": "2022-10-10T01:50:33.328576Z",
+						"shell.execute_reply": "2022-10-10T01:50:33.327994Z",
+						"shell.execute_reply.started": "2022-10-10T01:50:28.114358Z"
+					},
+					"outputId": "ec5cce13-8a78-4168-f7ef-5e3fc9672bef",
+					"id": "LeWuplMuq20e"
+				},
+				"source": [
+					"# Predict on model\n",
+					"prediction_rf = pipelineModel_rf.transform(testDF)\n",
+					"\n",
+					"rf_auroc = evaluator_auroc.evaluate(prediction_rf)\n",
+					"print('Baseline: Random Forest')\n",
+					"print('Area under ROC curve: %g' % (rf_auroc))\n",
+					"print('Test Error: %g' % (1.0 - rf_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_rf)) "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:50:33.329489Z",
+						"iopub.status.busy": "2022-10-10T01:50:33.329336Z",
+						"iopub.status.idle": "2022-10-10T01:51:05.606106Z",
+						"shell.execute_reply": "2022-10-10T01:51:05.605734Z",
+						"shell.execute_reply.started": "2022-10-10T01:50:33.329473Z"
+					},
+					"outputId": "f4292a14-b169-45e7-f3f8-11061f45b311",
+					"id": "hzaBreRhq20h"
+				},
+				"source": [
+					"# Extract info from pipeline\n",
+					"rf_info = pipelineModel_rf.stages[-1]\n",
+					"trainingSummary = rf_info.summary\n",
+					"\n",
+					"# ROC Curve\n",
+					"roc = trainingSummary.roc.toPandas()\n",
+					"plt.plot(roc['FPR'],roc['TPR'])\n",
+					"plt.ylabel('False Positive Rate')\n",
+					"plt.xlabel('True Positive Rate')\n",
+					"plt.title('ROC Curve')\n",
+					"plt.savefig(save_results_to + 'RF_Baseline_SMOTE_ROC.png', dpi=my_dpi*10, \n",
+					"            bbox_inches='tight')\n",
+					"\n",
+					"plt.show()\n",
+					"print('\\nTraining set areaUnderROC: ' + str(trainingSummary.areaUnderROC))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:51:05.607053Z",
+						"iopub.status.busy": "2022-10-10T01:51:05.606843Z",
+						"iopub.status.idle": "2022-10-10T01:51:06.635544Z",
+						"shell.execute_reply": "2022-10-10T01:51:06.635066Z",
+						"shell.execute_reply.started": "2022-10-10T01:51:05.607036Z"
+					},
+					"outputId": "bcc42242-601d-4518-8a32-763d96568315",
+					"id": "4TjJprZwq20k"
+				},
+				"source": [
+					"# Precision Recall Curve\n",
+					"pr = trainingSummary.pr.toPandas()\n",
+					"plt.plot(pr['recall'],pr['precision'])\n",
+					"plt.ylabel('Precision')\n",
+					"plt.xlabel('Recall')\n",
+					"plt.savefig(save_results_to + 'RF_Baseline_SMOTE_RecallPrecision.png', \n",
+					"            dpi=my_dpi*10, bbox_inches='tight')\n",
+					"plt.show()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "hRGC-8fc065A"
+				},
+				"source": [
+					"## Gradient Boosted Trees"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:51:06.639518Z",
+						"iopub.status.busy": "2022-10-10T01:51:06.639413Z",
+						"iopub.status.idle": "2022-10-10T01:53:19.786341Z",
+						"shell.execute_reply": "2022-10-10T01:53:19.785734Z",
+						"shell.execute_reply.started": "2022-10-10T01:51:06.639505Z"
+					},
+					"outputId": "5fa2b674-4e2c-4921-ee0d-ed137fb3167b",
+					"id": "kuUBjJtQrEax"
+				},
+				"source": [
+					"# Set up GBT pipeline\n",
+					"gbt = GBTClassifier(labelCol='label', \n",
+					"                    featuresCol='unscaledFeatures', \n",
+					"                    maxDepth=5, \n",
+					"                    maxBins=32, \n",
+					"                    maxIter=10,\n",
+					"                    seed=seed_value)\n",
+					"\n",
+					"search_time_start = time.time()\n",
+					"pipeline_gbt = Pipeline(stages=[gbt])\n",
+					"pipelineModel_gbt = pipeline_gbt.fit(trainDF)\n",
+					"print('Time to fit baseline model:', time.time() - search_time_start)\n",
+					"\n",
+					"Path = '/notebooks/LoanStatus/Python/ML/SparkML/Models/Baseline/baselineModel_gbt_smote'\n",
+					"pipelineModel_gbt.save(Path)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:53:19.787638Z",
+						"iopub.status.busy": "2022-10-10T01:53:19.787281Z",
+						"iopub.status.idle": "2022-10-10T01:53:24.987353Z",
+						"shell.execute_reply": "2022-10-10T01:53:24.986861Z",
+						"shell.execute_reply.started": "2022-10-10T01:53:19.787619Z"
+					},
+					"outputId": "1e6616f7-aa97-431d-857f-edaad64e8d50",
+					"id": "Uxs9ClvxrEa4"
+				},
+				"source": [
+					"# Predict on model\n",
+					"prediction_gbt = pipelineModel_gbt.transform(testDF)\n",
+					"\n",
+					"gbt_auroc = evaluator_auroc.evaluate(prediction_gbt)\n",
+					"print('Baseline: Gradient Boosted Trees')\n",
+					"print('Area under ROC curve: %g' % (gbt_auroc))\n",
+					"print('Test Error: %g' % (1.0 - gbt_auroc))\n",
+					"print('Accuracy:', evaluator_acc.evaluate(prediction_gbt)) "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"id": "rOxhV3yj1Rs7"
+				},
+				"source": [
+					"## Model Metrics"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"execution": {
+						"iopub.execute_input": "2022-10-10T01:53:24.988194Z",
+						"iopub.status.busy": "2022-10-10T01:53:24.988071Z",
+						"iopub.status.idle": "2022-10-10T01:54:01.970151Z",
+						"shell.execute_reply": "2022-10-10T01:54:01.969724Z",
+						"shell.execute_reply.started": "2022-10-10T01:53:24.988179Z"
+					},
+					"id": "Kxd3D0SXnVzZ",
+					"outputId": "9bd671b1-31a8-4422-d026-1d6dfa2074fe"
+				},
+				"source": [
+					"print('SMOTE Baseline Models:')\n",
+					"for model in ['prediction_lr', 'prediction_lsvc', 'prediction_dt', \n",
+					"              'prediction_rf', 'prediction_gbt']:\n",
+					"    df = globals()[model]\n",
+					"    \n",
+					"    tp = df[(df.label == 1) & (df.prediction == 1)].count()\n",
+					"    tn = df[(df.label == 0) & (df.prediction == 0)].count()\n",
+					"    fp = df[(df.label == 0) & (df.prediction == 1)].count()\n",
+					"    fn = df[(df.label == 1) & (df.prediction == 0)].count()\n",
+					"    a = ((tp + tn)/df.count())\n",
+					"    \n",
+					"    if(tp + fn == 0.0):\n",
+					"        r = 0.0\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    elif(tp + fp == 0.0):\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = 0.0\n",
+					"    else:\n",
+					"        r = float(tp) / (tp + fn)\n",
+					"        p = float(tp) / (tp + fp)\n",
+					"    \n",
+					"    if(p + r == 0):\n",
+					"        f1 = 0\n",
+					"    else:\n",
+					"        f1 = 2 * ((p * r)/(p + r))\n",
+					"    \n",
+					"    print('\\nModel:', model)\n",
+					"    print('True Positives:', tp)\n",
+					"    print('True Negatives:', tn)\n",
+					"    print('False Positives:', fp)\n",
+					"    print('False Negatives:', fn)\n",
+					"    print('Total:', df.count())\n",
+					"    print('Accuracy:', a)\n",
+					"    print('Recall:', r)\n",
+					"    print('Precision: ', p)\n",
+					"    print('F1 score:', f1)\n",
+					"    print('\\n')"
+				]
+			}
+		]
+	}
+}

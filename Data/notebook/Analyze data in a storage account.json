@@ -1,0 +1,495 @@
+{
+	"name": "Analyze data in a storage account",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "f5e6d079-c246-4ab6-bf42-6e9488a443b4"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "python"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Analyze data in a storage account\r\n",
+					"Link: https://learn.microsoft.com/en-us/azure/synapse-analytics/get-started-analyze-storage\r\n",
+					"\r\n",
+					"Link: https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/synapse-analytics/spark/apache-spark-machine-learning-mllib-notebook.md"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"import matplotlib.pyplot as plt\r\n",
+					"from datetime import datetime\r\n",
+					"from dateutil import parser\r\n",
+					"from pyspark.sql.functions import unix_timestamp, date_format, col, when\r\n",
+					"from pyspark.ml import Pipeline\r\n",
+					"from pyspark.ml import PipelineModel\r\n",
+					"from pyspark.ml.feature import RFormula\r\n",
+					"from pyspark.ml.feature import OneHotEncoder, StringIndexer, VectorIndexer\r\n",
+					"from pyspark.ml.classification import LogisticRegression\r\n",
+					"from pyspark.mllib.evaluation import BinaryClassificationMetrics\r\n",
+					"from pyspark.ml.evaluation import BinaryClassificationEvaluator"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"microsoft": {
+						"language": "python"
+					}
+				},
+				"source": [
+					"%%pyspark\r\n",
+					"abspath = 'abfss://users@datalake6886.dfs.core.windows.net/NYCTaxi/PassengerCountStats_parquetformat/part-00000-1f251a58-d8ac-4972-9215-8d528d490690-c000.snappy.parquet'\r\n",
+					"df = spark.read.load(abspath, format='parquet')\r\n",
+					"display(df.limit(10))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"from azureml.opendatasets import NycTlcYellow\r\n",
+					"\r\n",
+					"end_date = parser.parse('2018-06-06')\r\n",
+					"start_date = parser.parse('2018-05-01')\r\n",
+					"nyc_tlc = NycTlcYellow(start_date=start_date, end_date=end_date)\r\n",
+					"filtered_df = nyc_tlc.to_spark_dataframe()"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# To make development easier, faster, and less expensive, downsample for now\r\n",
+					"sampled_taxi_df = filtered_df.sample(True, 0.001, seed=1234)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"#sampled_taxi_df.show(5)\r\n",
+					"display(sampled_taxi_df)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"sampled_taxi_df.createOrReplaceTempView(\"nytaxi\")"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Prepare the data"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"taxi_df = sampled_taxi_df.select('totalAmount', 'fareAmount', 'tipAmount', 'paymentType', 'rateCodeId', 'passengerCount'\\\r\n",
+					"                                , 'tripDistance', 'tpepPickupDateTime', 'tpepDropoffDateTime'\\\r\n",
+					"                                , date_format('tpepPickupDateTime', 'hh').alias('pickupHour')\\\r\n",
+					"                                , date_format('tpepPickupDateTime', 'EEEE').alias('weekdayString')\\\r\n",
+					"                                , (unix_timestamp(col('tpepDropoffDateTime')) - unix_timestamp(col('tpepPickupDateTime'))).alias('tripTimeSecs')\\\r\n",
+					"                                , (when(col('tipAmount') > 0, 1).otherwise(0)).alias('tipped')\r\n",
+					"                                )\\\r\n",
+					"                        .filter((sampled_taxi_df.passengerCount > 0) & (sampled_taxi_df.passengerCount < 8)\\\r\n",
+					"                                & (sampled_taxi_df.tipAmount >= 0) & (sampled_taxi_df.tipAmount <= 25)\\\r\n",
+					"                                & (sampled_taxi_df.fareAmount >= 1) & (sampled_taxi_df.fareAmount <= 250)\\\r\n",
+					"                                & (sampled_taxi_df.tipAmount < sampled_taxi_df.fareAmount)\\\r\n",
+					"                                & (sampled_taxi_df.tripDistance > 0) & (sampled_taxi_df.tripDistance <= 100)\\\r\n",
+					"                                & (sampled_taxi_df.rateCodeId <= 5)\r\n",
+					"                                & (sampled_taxi_df.paymentType.isin({\"1\", \"2\"}))\r\n",
+					"                                )"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"Add final features"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"taxi_featurised_df = taxi_df.select('totalAmount', 'fareAmount', 'tipAmount', 'paymentType', 'passengerCount'\\\r\n",
+					"                                                , 'tripDistance', 'weekdayString', 'pickupHour','tripTimeSecs','tipped'\\\r\n",
+					"                                                , when((taxi_df.pickupHour <= 6) | (taxi_df.pickupHour >= 20),\"Night\")\\\r\n",
+					"                                                .when((taxi_df.pickupHour >= 7) & (taxi_df.pickupHour <= 10), \"AMRush\")\\\r\n",
+					"                                                .when((taxi_df.pickupHour >= 11) & (taxi_df.pickupHour <= 15), \"Afternoon\")\\\r\n",
+					"                                                .when((taxi_df.pickupHour >= 16) & (taxi_df.pickupHour <= 19), \"PMRush\")\\\r\n",
+					"                                                .otherwise(0).alias('trafficTimeBins')\r\n",
+					"                                              )\\\r\n",
+					"                                       .filter((taxi_df.tripTimeSecs >= 30) & (taxi_df.tripTimeSecs <= 7200))"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Create a logistic regression model"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Because the sample uses an algorithm that works only with numeric features, convert them so they can be consumed\r\n",
+					"sI1 = StringIndexer(inputCol=\"trafficTimeBins\", outputCol=\"trafficTimeBinsIndex\")\r\n",
+					"en1 = OneHotEncoder(dropLast=False, inputCol=\"trafficTimeBinsIndex\", outputCol=\"trafficTimeBinsVec\")\r\n",
+					"sI2 = StringIndexer(inputCol=\"weekdayString\", outputCol=\"weekdayIndex\")\r\n",
+					"en2 = OneHotEncoder(dropLast=False, inputCol=\"weekdayIndex\", outputCol=\"weekdayVec\")\r\n",
+					"\r\n",
+					"# Create a new DataFrame that has had the encodings applied\r\n",
+					"encoded_final_df = Pipeline(stages=[sI1, en1, sI2, en2]).fit(taxi_featurised_df).transform(taxi_featurised_df)"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Train a logistic regression model"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Decide on the split between training and testing data from the DataFrame\r\n",
+					"trainingFraction = 0.7\r\n",
+					"testingFraction = (1-trainingFraction)\r\n",
+					"seed = 1234\r\n",
+					"\r\n",
+					"# Split the DataFrame into test and training DataFrames\r\n",
+					"train_data_df, test_data_df = encoded_final_df.randomSplit([trainingFraction, testingFraction], seed=seed)"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"Create the model formula and run it against the training DataFrame. Then you can validate against the testing DataFrame. Experiment with different versions of the model formula to see the impact of different combinations."
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Create a new logistic regression object for the model\r\n",
+					"logReg = LogisticRegression(maxIter=10, regParam=0.3, labelCol = 'tipped')\r\n",
+					"\r\n",
+					"## The formula for the model\r\n",
+					"classFormula = RFormula(formula=\"tipped ~ pickupHour + weekdayVec + passengerCount + tripTimeSecs + tripDistance + fareAmount + paymentType+ trafficTimeBinsVec\")\r\n",
+					"\r\n",
+					"## Undertake training and create a logistic regression model\r\n",
+					"lrModel = Pipeline(stages=[classFormula, logReg]).fit(train_data_df)\r\n",
+					"\r\n",
+					"## Saving the model is optional, but it's another form of inter-session cache\r\n",
+					"datestamp = datetime.now().strftime('%m-%d-%Y-%s')\r\n",
+					"fileName = \"lrModel_\" + datestamp\r\n",
+					"logRegDirfilename = fileName\r\n",
+					"lrModel.save(logRegDirfilename)\r\n",
+					"\r\n",
+					"## Predict tip 1/0 (yes/no) on the test dataset; evaluation using area under ROC\r\n",
+					"predictions = lrModel.transform(test_data_df)\r\n",
+					"predictionAndLabels = predictions.select(\"label\",\"prediction\").rdd\r\n",
+					"metrics = BinaryClassificationMetrics(predictionAndLabels)\r\n",
+					"print(\"Area under ROC = %s\" % metrics.areaUnderROC)"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"Create a visual representation of the prediction"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Plot the ROC curve; no need for pandas, because this uses the modelSummary object\r\n",
+					"modelSummary = lrModel.stages[-1].summary\r\n",
+					"\r\n",
+					"plt.plot([0, 1], [0, 1], 'r--')\r\n",
+					"plt.plot(modelSummary.roc.select('FPR').collect(),\r\n",
+					"         modelSummary.roc.select('TPR').collect())\r\n",
+					"plt.xlabel('False Positive Rate')\r\n",
+					"plt.ylabel('True Positive Rate')\r\n",
+					"plt.show()"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"Shut down the Spark instance\r\n",
+					"\r\n",
+					"After you finish running the application, shut down the notebook to release the resources by closing the tab. Or select End Session from the status panel at the bottom of the notebook."
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					""
+				]
+			}
+		]
+	}
+}
