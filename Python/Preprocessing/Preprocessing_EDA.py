@@ -12,7 +12,6 @@ import numpy as np
 from numpy import sort
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.backends.backend_pdf
 import seaborn as sns
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 from joblib import parallel_backend, import Parallel, delayed
@@ -28,8 +27,8 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 from group_lasso.utils import extract_ohe_groups
 import scipy.sparse
 from group_lasso import LogisticGroupLasso
-from pandas_profiling import ProfileReport
 import sweetviz as sv
+from ydata_profiling import ProfileReport
 warnings.filterwarnings('ignore')
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
@@ -63,54 +62,62 @@ os.chdir(path)
 
 # Remove columns with more than 95% missing
 df = df.replace(r'^\s*$', np.nan, regex=True)
-df = df.loc[:, df.isnull().mean() < 0.05]
-print('- Dimensions of Data when columns > 95% missing removed:', df.shape) 
-print('- 63 columns were removed due to high missingness') 
+df1 = df.loc[:, df.isnull().mean() < 0.05]
+print('- Dimensions when columns > 95% missing removed:', df1.shape)
+
+s = set(df1)
+varDiff = [x for x in df if x not in s]
+print('- Number of features removed due to high missingness:'
+      + str(len(varDiff)))
+
+df = df1
+del df1
 print('======================================================================')
 
 ###############################################################################
 # Define a function to examine data for data types, percentage missing and unique values
 def data_quality_table(df):
-  """Returns the characteristics of variables in a Pandas dataframe."""
-  var_type = df.dtypes
-  mis_val_percent = 100 * df.isnull().sum() / len(df)
-  unique_count = df.nunique()
-  mis_val_table = pd.concat([var_type, mis_val_percent, unique_count], axis=1)
-  mis_val_table_ren_columns = mis_val_table.rename(
-      columns = {0: 'Data Type', 1: 'Percent Missing', 2: 'Number Unique'})
-  mis_val_table_ren_columns = mis_val_table_ren_columns[
-      mis_val_table_ren_columns.iloc[:,1] >= 0].sort_values(
-          'Percent Missing', ascending=False).round(1)
-  print ('- There are ' + str(df.shape[1]) + ' columns.\n')
-  return mis_val_table_ren_columns
+    """Returns the characteristics of variables in a Pandas dataframe."""
+    var_type = df.dtypes
+    mis_val_percent = 100 * df.isnull().sum() / len(df)
+    unique_count = df.nunique()
+    mis_val_table = pd.concat([var_type, mis_val_percent, unique_count], axis=1)
+    mis_val_table_ren_columns = mis_val_table.rename(
+        columns = {0: 'Data Type', 1: 'Percent Missing', 2: 'Number Unique'})
+    mis_val_table_ren_columns = mis_val_table_ren_columns[
+        mis_val_table_ren_columns.iloc[:,1] >= 0].sort_values(
+            'Percent Missing', ascending=False).round(1)
+    print ('- There are ' + str(df.shape[0]) + ' rows and '
+           + str(df.shape[1]) + ' columns.\n')
+    return mis_val_table_ren_columns
 
 # Categorical variables
 # Examine dimensionality
 # Drop based on missing and questions
-df1 = df.select_dtypes(include='object')
+df1 = df.select_dtypes(include = 'object')
 print('\n              Data Quality: Qualitative Variables')
-print(data_quality_table(df1))
+display(data_quality_table(df1))
 print('\n')
 print('\nSample observations of qualitative variables:')
-print(df1.head())
+display(df1.head())
 
-df = df.drop(['title', 'last_pymnt_d', 'last_credit_pull_d', 
-              'earliest_cr_line', 'zip_code', 'sub_grade', 'issue_d',
-              'addr_state', 'policy_code'], axis=1)
+df = df.drop(['title', 'last_pymnt_d', 'zip_code', 'earliest_cr_line',
+              'last_credit_pull_d', 'issue_d', 'addr_state', 'sub_grade'],
+             axis=1)
 
 del df1
 
 # Quantitative variables
 # Remove rows with any column having NA/null for some important variables for complete cases
-df1 = df.select_dtypes(exclude='object')
+df1 = df.select_dtypes(exclude = 'object')
 print('\n              Data Quality: Quantitative Variables')
-print(data_quality_table(df1))
+display(data_quality_table(df1))
 print('\n')
 print('\nSample observations of quantitative variables:')
-print(df1.head())
+display(df1.head())
 
-df = df[df.bc_util.notna() & df.percent_bc_gt_75.notna() 
-        & df.pct_tl_nvr_dlq.notna() & df.mths_since_recent_bc.notna() 
+df = df[df.bc_util.notna() & df.percent_bc_gt_75.notna()
+        & df.pct_tl_nvr_dlq.notna() & df.mths_since_recent_bc.notna()
         & df.dti.notna() & df.inq_last_6mths.notna() & df.num_rev_accts.notna()]
 
 del df1
@@ -135,6 +142,7 @@ print('======================================================================')
 df['loan_status'] = df['loan_status'].replace(['Fully Paid'], 0)
 df['loan_status'] = df['loan_status'].replace(['In Grace Period'], 0)
 df['loan_status'] = df['loan_status'].replace(['Current'], 0)
+
 df['loan_status'] = df['loan_status'].replace(['Charged Off'], 1)
 df['loan_status'] = df['loan_status'].replace(['Late (31-120 days)'], 1)
 df['loan_status'] = df['loan_status'].replace(['Late (16-30 days)'], 1)
@@ -150,10 +158,6 @@ print('======================================================================')
 ###############################################################################
 ########################## Variable Selection #################################
 ###############################################################################
-######################   1. SelectFromModel using Xgboost #####################
-########################   2. Group Lasso  ####################################  
-###############################################################################
-###############################################################################
 # Separate input features and target
 X = df.drop('loan_status', axis=1)
 y = df.loan_status
@@ -162,7 +166,7 @@ y = df.loan_status
 X = pd.get_dummies(X, drop_first=True)
 
 ###############################################################################
-######################   1. SelectFromModel using Xgboost #####################
+######################   1. SelectFromModel using XGBoost #####################
 ###############################################################################
 # Fit baseline model on all data
 model = XGBClassifier(eval_metric='logloss', 
@@ -179,7 +183,7 @@ accuracy = accuracy_score(y, predictions)
 print('Accuracy: %.3f%%' % (accuracy * 100.0)) 
 print('======================================================================')
 
-# Xgboost - plot feature importance
+# XGBoost - plot feature importance
 plt.rcParams['figure.figsize'] = (10, 10)
 plt.rcParams.update({'font.size': 8.5})
 ax = plot_importance(model)
@@ -187,51 +191,73 @@ fig = ax.figure
 plt.tight_layout()
 fig.savefig('xgb_featureImportance_noVIF_AllData.png', dpi=my_dpi*10, 
             bbox_inches='tight')
-plt.show()
+plt.show();
 
+# Permutation importance
+perm_importance = permutation_importance(model, X, y)
+
+plt.rcParams.update({'font.size': 7})
+sorted_idx = perm_importance.importances_mean.argsort()
+plt.barh(X.columns[sorted_idx], perm_importance.importances_mean[sorted_idx])
+plt.xlabel('Permutation Importance')
+plt.tight_layout()
+plt.savefig('xgb_PermutationfeatureImportance_noVIF_AllData.png', dpi=my_dpi*10, 
+            bbox_inches='tight'))
+plt.show();
+
+# Visualize feature importance with SHAP
+explainer = shap.TreeExplainer(model)
+shap_values = explainer.shap_values(X)
+
+plt.rcParams.update({'font.size': 7})
+fig = plt.figure()
+shap.summary_plot(shap_values, X, show=False)
+fig.savefig('ShapSummary_xgb_noVIF_AllData.png', dpi=my_dpi*10, 
+            bbox_inches='tight')
+plt.show();
 
 # Fit model using each importance as a threshold
 # Run for all features and then repeat for features after VIF to compare (X -> X1)
 print('Time for feature selection using XGBoost...')
 search_time_start = time.time()
-
-feat_max = X.shape[1] 
-feat_min = 2 
+feat_max = X.shape[1]
+feat_min = 2
 acc_max = accuracy
 thresholds = sort(model.feature_importances_)
 thresh_goal = thresholds[0]
 accuracy_list = []
 for thresh in thresholds:
-  selection = SelectFromModel(model, threshold=thresh, prefit=True)
-  select_X = selection.transform(X)
+    selection = SelectFromModel(model, threshold=thresh, prefit=True)
+    select_X = selection.transform(X)
     
-  # Define model
-  selection_model = XGBClassifier(eval_metric='logloss',
-                                  use_label_encoder=False, 
-                                  tree_method='gpu_hist', 
-                                  gpu_id=0,
-                                  random_state=seed_value)
-  # Train model
-  selection_model.fit(select_X, y)
+    # Define model
+    selection_model = XGBClassifier(eval_metric='logloss',
+                                    use_label_encoder=False,
+                                    tree_method='gpu_hist',
+                                    gpu_id=0,
+                                    random_state=seed_value)
+    # Train model
+    selection_model.fit(select_X, y)
     
-  # Evaluate model
-  selection_model_pred = selection_model.predict(select_X)
-  selection_predictions = [round(value) for value in selection_model_pred]
-  accuracy = accuracy_score(y_true=y, y_pred=selection_predictions)
-  accuracy = accuracy * 100
-  print('Thresh= %.6f, n= %d, Accuracy: %.3f%%' % (thresh, select_X.shape[1],
-                                                   accuracy))
-  accuracy_list.append(accuracy)
-  if(select_X.shape[1] < feat_max) and (select_X.shape[1] >= feat_min) and (accuracy >= acc_max):
-    n_min = select_X.shape[1]
-    acc_max = accuracy
-    thresh_goal = thresh
+    # Evaluate model
+    selection_model_pred = selection_model.predict(select_X)
+    selection_predictions = [round(value) for value in selection_model_pred]
+    accuracy = accuracy_score(y_true=y, y_pred=selection_predictions)
+    accuracy = accuracy * 100
+    print('Thresh= %.6f, n= %d, Accuracy: %.3f%%' % (thresh, select_X.shape[1],
+                                                     accuracy))
+    accuracy_list.append(accuracy)
+    if(select_X.shape[1] < feat_max) and (select_X.shape[1] >= feat_min) and (accuracy >= acc_max):
+      n_min = select_X.shape[1]
+      acc_max = accuracy
+      thresh_goal = thresh
         
 print('\n')
-print('Finished feature selection using XGBoost in:', time.time() - search_time_start)
+print('Finished feature selection using XGBoost in:',
+      time.time() - search_time_start)
 print('\n')
 print('\nThe optimal threshold is:')
-print(thresh_goal) 
+print(thresh_goal)
 print('======================================================================')
 
 # Create df for number features and accuracy 
@@ -239,7 +265,7 @@ key_list = list(range(X.shape[1], 0, -1))
 accuracy_dict = dict(zip(key_list, accuracy_list))
 accuracy_df = pd.DataFrame(accuracy_dict.items(), columns=['n_features',
                                                            'Accuracy'])
-accuracy_df.to_csv('selectFromModel_Xgboost_nFeatures_Accuracy.csv',
+accuracy_df.to_csv('selectFromModel_xgb_nFeatures_Accuracy.csv',
                    index=False)
 
 # Select features using optimal threshold with least number of features
@@ -247,7 +273,8 @@ selection = SelectFromModel(model, threshold=thresh_goal, prefit=True)
 
 # Fit model for feature importance
 feature_names = X.columns[selection.get_support(indices=True)]
-print('\n- Feature selection using XGBoost resulted in ' + str(len(feature_names)) + ' features.')
+print('\n- Feature selection using XGBoost resulted in '
+      + str(len(feature_names)) + ' features.')
 print('\n- Features selected using optimal threshold for accuracy:')
 print(X.columns[selection.get_support()]) 
 
@@ -275,9 +302,9 @@ plt.rcParams.update({'font.size': 10})
 ax = plot_importance(model)
 fig = ax.figure
 plt.tight_layout()
-fig.savefig('xgb_featureImportance_Thresh_1.67e-4.png', dpi=my_dpi*10, 
+fig.savefig('xgb_featureImportance_bestThresh.png', dpi=my_dpi*10, 
             bbox_inches='tight')
-plt.show()
+plt.show();
 
 # Permutation Based Feature Importance (with scikit-learn)
 perm_importance = permutation_importance(model, X, y)
@@ -289,7 +316,7 @@ sorted_idx = perm_importance.importances_mean.argsort()
 plt.barh(X.columns[sorted_idx], perm_importance.importances_mean[sorted_idx])
 plt.xlabel('Permutation Importance')
 plt.savefig('xgb_PermutationfeatureImportance_noVIF_bestThresh.png')
-plt.show()
+plt.show();
 
 ###############################################################################
 # Feature Importance Computed with SHAP Values
@@ -300,8 +327,9 @@ shap_values = explainer.shap_values(X)
 fig = plt.figure()
 plt.rcParams.update({'font.size': 7})
 shap.summary_plot(shap_values, X, show=False)
-fig.savefig('Shap_summary_Xgboost_bestThresh.png', dpi=my_dpi*10, 
+fig.savefig('ShapSummary_xgb_bestThresh.png', dpi=my_dpi*10, 
             bbox_inches='tight')
+plt.show();
 
 ###############################################################################
 #################   Multicollinearity using VIF for Linear  ###################
@@ -316,20 +344,21 @@ df_num = X1.select_dtypes(include = ['float64', 'int64'])
 
 # Defining the VIF function for multicollinearity
 def calculate_vif(X, threshold=5.0):
-  features = [X.columns[i] for i in range(X.shape[1])]
-  dropped = True
-  while dropped:
-    dropped = False
-    print('\nThe starting number of quantitative features is: ' + str(len(features)))
-    vif = Parallel(n_jobs=-1, 
-                   verbose=5)(delayed(variance_inflation_factor)(X[features].values, 
-                                                                 ix) for ix in range(len(features)))
-    maxloc = vif.index(max(vif))
-    if max(vif) > threshold:
-      print(time.ctime() + ' dropping \'' + X[features].columns[maxloc] 
-            + '\' at index: ' + str(maxloc))
-      features.pop(maxloc)
-      dropped = True
+    features = [X.columns[i] for i in range(X.shape[1])]
+    dropped = True
+    while dropped:
+        dropped = False
+        print('\nThe starting number of quantitative features is: '
+              + str(len(features)))
+        vif = Parallel(n_jobs=-1,
+                       verbose=5)(delayed(variance_inflation_factor)(X[features].values,
+                                                                     ix) for ix in range(len(features)))
+        maxloc = vif.index(max(vif))
+        if max(vif) > threshold:
+            print(time.ctime() + ' dropping \'' + X[features].columns[maxloc]
+                  + '\' at index: ' + str(maxloc))
+          features.pop(maxloc)
+          dropped = True
   print('Features Remaining:')
   print([features])
   return X[[i for i in features]]
@@ -340,15 +369,16 @@ search_time_start = time.time()
 X1 = calculate_vif(df_num, 5) 
 print('\nNumber of quant features after VIF:', X1.shape[1]) 
 
-print('Finished calculating VIF on numerical data using threshold = 5 in:', 
+print('Finished calculating VIF on numerical data using threshold = 5 in:',
       time.time() - search_time_start)
-print ('- There are ' + str(X1.shape[0]) + ' rows and ' + str(X1.shape[1]) + ' columns.\n')
+print ('- There are ' + str(X1.shape[0]) + ' rows and '
+       + str(X1.shape[1]) + ' columns.\n')
 print('\nQuant features remaining after VIF:')
 print(X1.columns)
 print('======================================================================')
 
 # Select qual vars to merge with filtered quant
-df1 = df.select_dtypes(include = 'object')
+df1 = df.select_dtypes(include='object')
 
 # Concatenate filtered quant, qual and dependent variable
 df1 = pd.concat([X1, df1], axis=1)     
@@ -399,9 +429,9 @@ grid = GridSearchCV(estimator = LogisticGroupLasso(
 
 print('Time for feature selection using GroupLasso GridSearchCV...')
 search_time_start = time.time()
-with parallel_backend('threading', n_jobs=-1): 
-  grid.fit(X2, y)
-print('Finished feature selection using GroupLasso GridSearchCV in:', 
+with parallel_backend('threading', n_jobs=-1):
+    grid.fit(X2, y)
+print('Finished feature selection using GroupLasso GridSearchCV in:',
       time.time() - search_time_start)
 
 print('\nGroup Lasso GridSearchCV Feature selection')
@@ -427,8 +457,8 @@ gl = LogisticGroupLasso(
     random_state=seed_value,
 )
 
-with parallel_backend('threading', n_jobs=-1): 
-  gl.fit(X2, y)
+with parallel_backend('threading', n_jobs=-1):
+    gl.fit(X2, y)
 
 pred_y = gl.predict(X2)
 sparsity_mask = gl.sparsity_mask_ 
@@ -455,7 +485,7 @@ plt.ylabel('Loss')
 plt.title('Group Lasso: Loss over the Number of Iterations')
 plt.savefig('groupLasso_bestModel_3000iterTol1e-1_loss.png', dpi=my_dpi*10, 
             bbox_inches='tight')
-plt.show()
+plt.show();
 # Accuracy from group lasso not comparable to other methods so not using further
 
 del X2, tdf, variables
@@ -463,10 +493,10 @@ del X2, tdf, variables
 ###############################################################################
 ############### Explore Results from Variable Selection Methods ###############
 ###############################################################################
-# Use SelectFromModel=Xgboost X,y results from variable selection 
+# Use SelectFromModel=XGBoost X,y results from variable selection 
 # As used in the previous sections
-X_xgb_all = X
-X_xgb_vif = X1
+X_xgb = X
+X_vif = X1
 
 # Separate input features and target to restore original
 X2 = df.drop('loan_status', axis=1)
@@ -475,16 +505,15 @@ X2 = df.drop('loan_status', axis=1)
 X2 = pd.get_dummies(X2, drop_first=True)
 
 # Use results from variable selection using MV-SIS completed in R
-X_mfs = X2[['num_bc_tl', 'num_il_tl', 'num_op_rev_tl', 'pymnt_plan_y', 
-            'num_accts_ever_120_pd', 'mo_sin_old_rev_tl_op', 
-            'last_pymnt_amnt', 'percent_bc_gt_75', 'revol_util', 
+X_mfs = X2[['num_bc_tl', 'num_il_tl', 'num_op_rev_tl', 'pymnt_plan_y',
+            'num_accts_ever_120_pd', 'mo_sin_old_rev_tl_op',
+            'last_pymnt_amnt', 'percent_bc_gt_75', 'revol_util',
             'tot_hi_cred_lim', 'num_actv_rev_tl', 'disbursement_method_DirectPay',
             'tot_coll_amt', 'term_ 60 months', 'mort_acc', 'funded_amnt_inv',
-            'int_rate', 'inq_last_6mths',  'delinq_2yrs', 'installment',
-            'collections_12_mths_ex_med',  'open_acc', 'loan_amnt',
-            'funded_amnt', 'annual_inc',  'num_tl_op_past_12m',
+            'int_rate', 'inq_last_6mths', 'delinq_2yrs', 'installment',
+            'collections_12_mths_ex_med', 'open_acc', 'loan_amnt',
+            'funded_amnt', 'annual_inc', 'num_tl_op_past_12m',
             'home_ownership_OTHER', 'total_bc_limit']]
-
 X_mfs = X_mfs.drop_duplicates()
 print('\nDimensions of Data using Variables selected from MVSIS:', X_mfs.shape) 
 print('======================================================================')
@@ -492,54 +521,62 @@ print('======================================================================')
 ###############################################################################
 # Find differences in variables from different variable selection methods
 # Difference between important features using xgboost=all vs after vif
-s = set(X_xgb_all)
-varDiff_xgb = [x for x in X_xgb_vif if x not in s]
-print('\nFeatures in xgb using VIF but not in Xgb - all:', varDiff_xgb) 
-print('\nNumber of different features: ' + str(len(varDiff_xgb)))
+s = set(X_xgb)
+varDiff_vif = [x for x in X_vif if x not in s]
+print('\nFeatures using VIF but not in XGB:')
+print(varDiff_vif)
+print('- Number of different features: ' + str(len(varDiff_vif)))
 
-s1 = set(X_xgb_vif)
-varDiff_xgbVIF = [x for x in X_xgb_all if x not in s1]
-print('\nFeatures in xgb_all but not in Xgb_VIF: ', varDiff_xgbVIF) 
-print('Number of different features: ' + str(len(varDiff_xgbVIF)))
+s1 = set(X_vif)
+varDiff_xgb = [x for x in X_xgb if x not in s1]
+print('\nFeatures in XGB but not in VIF:')
+print(varDiff_xgb)
+print('- Number of different features: ' + str(len(varDiff_xgb)))
 
 varDiff_mvsisAll = [x for x in X_mfs if x not in s]
-print('\nFeatures in MVSIS but not in xgb_all: ', varDiff_mvsisAll) 
-print('Number of different features: ' + str(len(varDiff_mvsisAll)))
+print('\nFeatures in MVSIS but not in XGB:')
+print(varDiff_mvsisAll)
+print('- Number of different features: ' + str(len(varDiff_mvsisAll)))
 
-varDiff_mvsisVIF = [x for x in X_mfs if x not in s]
-print('\nFeatures in MVSIS but not in xgb_VIF: ', varDiff_mvsisVIF) 
-print('Number of different features: ' + str(len(varDiff_mvsisVIF)))
+varDiff_mvsisVIF = [x for x in X_mfs if x not in s1]
+print('\nFeatures in MVSIS but not in VIF:')
+print(varDiff_mvsisVIF)
+print('- Number of different features: ' + str(len(varDiff_mvsisVIF)))
 
 s1 = set(X_mfs)
-varDiff_mvsisAll1 = [x for x in X_xgb_all if x not in s1]
-print('\nFeatures in xgb_all but not in MV-SIS: ', varDiff_mvsisAll1) 
-print('Number of different features: ' + str(len(varDiff_mvsisAll1)))
+varDiff_mvsisAll1 = [x for x in X_xgb if x not in s1]
+print('\nFeatures in XGB but not in MV-SIS:')
+print(varDiff_mvsisAll1)
+print('- Number of different features: ' + str(len(varDiff_mvsisAll1)))
 
-varDiff_mvsisVIF1 = [x for x in X_xgb_vif if x not in s1]
-print('\nFeatures in xgb_VIF but not in MV-SIS: ', varDiff_mvsisVIF1) 
-print('Number of different features: ' + str(len(varDiff_mvsisVIF1)))
+varDiff_mvsisVIF1 = [x for x in X_vif if x not in s1]
+print('\nFeatures in VIF but not in MV-SIS:')
+print(varDiff_mvsisVIF1)
+print('- Number of different features: ' + str(len(varDiff_mvsisVIF1)))
 print('======================================================================')
 
 # Add variables found in both MVSIS and xgb_VIF and only MVSIS to set for EDA
-df_tmp = X2[['num_il_tl', 'num_op_rev_tl', 'num_accts_ever_120_pd',
+df_tmp = df[['num_bc_tl', 'num_il_tl', 'num_op_rev_tl', 'num_accts_ever_120_pd',
              'mo_sin_old_rev_tl_op', 'percent_bc_gt_75', 'revol_util',
              'num_actv_rev_tl', 'tot_coll_amt', 'mort_acc', 'delinq_2yrs',
-             'open_acc', 'num_tl_op_past_12m', 'home_ownership_OTHER']]
+             'collections_12_mths_ex_med', 'open_acc',
+             'num_tl_op_past_12m', 'home_ownership_OTHER']]
 
-df_X = pd.concat([X_xgb_all, df_tmp], axis=1)
-df = pd.concat([df_X, y], axis=1)
-print('\nDimensions of data using for further EDA:', df.shape) 
+df = pd.concat([X_xgb, df_tmp, y], axis=1)
+df = df.drop_duplicates()
+print('- Dimensions of data using for further EDA:', df.shape)
 print('======================================================================')
 
-del X, X2, s, s1, varDiff_xgb, varDiff_xgbVIF, varDiff_mvsisAll, varDiff_mvsisVIF
-del X_mfs, varDiff_mvsisAll1, varDiff_mvsisVIF1, df_tmp
+del X_xgb, X_vif, X_mfs
+del df_tmp, y, s, s1, varDiff_vif, varDiff_xgb, varDiff_mvsisAll
+del varDiff_mvsisVIF, varDiff_mvsisAll1, varDiff_mvsisVIF1
 
 ###############################################################################
-# Set path for dats
+# Set path for data
 path = r'D:\LoanStatus\Data'
 os.chdir(path)
 
-# Write to csv for EDA in Spark
+# Write to csv for EDA
 df.to_csv('LendingTree_LoanStatus_EDA.csv', index=False)
 
 ###############################################################################
@@ -560,22 +597,22 @@ print('======================================================================')
 # Correlations - avoid duplicate, and self correlations 
 # Find the pairs of features on diagonal and lower triangular of correlation matrix
 def find_repetitive_pairs(df):
-  """Returns the pairs of features on the diagonal and lower triangle of the correlation matrix."""
-  pairs_to_drop = set()
-  cols = df.columns
-  for i in range(0, df.shape[1]):
-    for j in range(0, i+1):
-      pairs_to_drop.add((cols[i], cols[j]))
-  return pairs_to_drop
+    """Returns the pairs of features on the diagonal and lower triangle of the correlation matrix."""
+    pairs_to_drop = set()
+    cols = df.columns
+    for i in range(0, df.shape[1]):
+        for j in range(0, i+1):
+            pairs_to_drop.add((cols[i], cols[j]))
 
-def find_top_correlations(df, n): 
-  """Returns the highest correlations without duplicates."""
-  au_corr = df.corr(method='spearman').abs().unstack()
-  labels_to_drop = find_repetitive_pairs(df)
-  au_corr = au_corr.drop(labels=labels_to_drop).sort_values(ascending=False)
-  return au_corr[0:n]
+def find_top_correlations(df, n):
+    """Returns the highest correlations without duplicates."""
+    au_corr = df.corr(method='spearman').abs().unstack()
+    labels_to_drop = find_repetitive_pairs(df)
+    au_corr = au_corr.drop(labels=labels_to_drop).sort_values(ascending=False)
+    return au_corr[0:n]
 
-print('The 20 features with the highest correlations:')
+print('- The selected dataframe has ' + str(df_num.shape[1]) + ' columns that are quantitative variables.')
+print('- The 20 features with the highest correlations:')
 print(find_top_correlations(df_num, 20))
 print('======================================================================')
 
@@ -586,34 +623,76 @@ corr = df_num.corr(method='spearman')
 fig = plt.figure()
 plt.rcParams['figure.figsize'] = (21, 14)
 plt.rcParams.update({'font.size': 6})
-ax = sns.heatmap(corr[(corr >= 0.7) | (corr <= -0.7)], 
+ax = sns.heatmap(corr[(corr >= 0.7) | (corr <= -0.7)],
                  cmap='viridis', vmax=1.0, vmin=-1.0, linewidths=0.1,
-                 linecolor='black', annot=True, annot_kws={'size': 9}, 
+                 linecolor='black', annot=True, annot_kws={'size': 9},
                  square=True)
-
 plt.title('Correlation Matrix with Spearman rho')
 fig.savefig('EDA_correlationMatrix_spearman.png', dpi=my_dpi*10,
             bbox_inches='tight')
+plt.show();
 
 ###############################################################################
-# Overlaid histograms of quant vars for Loan_status
-pdf = matplotlib.backends.backend_pdf.PdfPages('EDA_Quant_Histograms_output.pdf')
-for var in df_num.columns[:]:
-  fig = plt.figure(figsize=(8.27, 11.69), dpi=my_dpi*10)
-  sns.histplot(x=var, data=df_num, hue=df.loan_status, kde=True)
-  sns.despine(offset=10, trim=True) 
-  fig.set_size_inches(22,14)
-  pdf.savefig(fig)
-pdf.close()
+# Histograms of quant vars
+df_num = df.select_dtypes(include = ['float64', 'int64'])
+df_num = df_num.drop(['loan_status'], axis=1)
 
-# Box-and-whisker plots of quant vars for Loan_status
-pdf = matplotlib.backends.backend_pdf.PdfPages('EDA_Quant_Boxplots_output.pdf')
-for var in df_num.columns[:]:
-  fig = plt.figure(figsize=(8.27, 11.69), dpi=my_dpi*10)
-  sns.boxplot(x=df.loan_status, y=var, data=df_num)
-  fig.set_size_inches(22,14)
-  pdf.savefig(fig)
-pdf.close()
+plt.rcParams.update({'font.size': 16})
+fig, ax = plt.subplots(15,3, figsize=(21,35))
+fig.suptitle('Quantitative Features: Histograms', y=1.01, fontsize=30)
+for variable, subplot in zip(df_num, ax.flatten()):
+    a = sns.histplot(df_num[variable], ax=subplot)
+    a.set_yticklabels(a.get_yticks(), size=10)
+    a.set_xticklabels(a.get_xticks(), size=9)
+fig.tight_layout()
+fig.savefig('QuantVar_Histplot.png', dpi=my_dpi*10, bbox_inches='tight')
+plt.show();
+
+plt.rcParams.update({'font.size': 14})
+fig, ax = plt.subplots(15,3, figsize=(25,35))
+fig.suptitle('Quantitative Features: Histograms Grouped by Loan Status', y=1.01,
+             fontsize=30)
+for variable, subplot in zip(df_num, ax.flatten()):
+    a = sns.histplot(x=df_num[variable], data=df_num, hue=df.loan_status,
+                     kde=True, ax=subplot)
+    a.set_yticklabels(a.get_yticks(), size=10)
+    a.set_xticklabels(a.get_xticks(), size=10)
+fig.tight_layout()
+fig.savefig('QuantVar_Histplot_HueLoanStatus.png', dpi=my_dpi*10, bbox_inches='tight')
+plt.show();
+
+# Increase to more granular level
+df_num1 = df_num[['loan_amnt', 'funded_amnt', 'funded_amnt_inv',
+                  'int_rate', 'installment', 'total_pymnt', 'total_pymnt_inv',
+                  'total_rec_prncp', 'total_rec_int', 'mo_sin_old_rev_tl_op',
+                  'percent_bc_gt_75', 'revol_util']]
+
+plt.rcParams.update({'font.size': 16})
+fig, ax = plt.subplots(4,3, figsize=(21,30))
+fig.suptitle('Subset of Quantitative Features: Histograms with Grouped by Loan Status',
+             y=1.01, fontsize=30)
+for variable, subplot in zip(df_num1, ax.flatten()):
+    sns.histplot(x=df_num1[variable], data=df_num1, hue=df.loan_status,
+                 kde=True, ax=subplot)
+    a.set_yticklabels(a.get_yticks(), size=10)
+    a.set_xticklabels(a.get_xticks(), size=9)
+fig.tight_layout()
+fig.savefig('QuantVar_Histplot_HueLoanStatus_Subset.png', dpi=my_dpi*10, 
+            bbox_inches='tight')
+plt.show();
+
+###############################################################################    
+# Box plots
+plt.rcParams.update({'font.size': 15})
+fig, ax = plt.subplots(9,5, figsize=(21,30))
+fig.suptitle('Quantitative Features: Boxplots', y=1.01, fontsize=30)
+for var, subplot in zip(df_num, ax.flatten()):
+    a = sns.boxplot(x=df.loan_status, y=df_num[var], data=df_num, ax=subplot)
+    a.set_yticklabels(a.get_yticks(), size=12)
+    a.set_xticklabels(a.get_xticks(), size=12)
+fig.tight_layout()
+fig.savefig('QuantVar_Boxplot.png', dpi=my_dpi*10, bbox_inches='tight')
+plt.show();
 
 ###############################################################################    
 # Examine Qualitative vars
@@ -624,16 +703,25 @@ print('The selected dataframe has ' + str(df_cat.shape[1]) +
 print('======================================================================')
 
 # Count plot
-fig, ax = plt.subplots(5, 4, figsize=(11.7, 8.27))
+df_cat = df.select_dtypes(include = 'uint8')
+
+print('The selected dataframe has ' + str(df_cat.shape[1])
+      + ' columns that are qualitative variables.')
+print('\n')
+fig, ax = plt.subplots(5, 4, figsize=(21,21))
+fig.suptitle('Qualitative Features: Count Plots', y=1.01, fontsize=30)
 for variable, subplot in zip(df_cat, ax.flatten()):
-  sns.countplot(df_cat[variable], ax=subplot)
-plt.tight_layout()  
+    a = sns.countplot(df_cat[variable], ax=subplot)
+    a.set_yticklabels(a.get_yticks(), size=10)
+fig.tight_layout()
 fig.savefig('QualVar_Countplot.png', dpi=my_dpi*10, bbox_inches='tight')
+plt.show(); 
 
 ###############################################################################
 # Automated EDA with Sweetviz after cleaning
 sweet_report = sv.analyze(df)
 sweet_report.show_html('Loan_Status_AutomatedEDA.html')
+sweet_report.show_notebook(layout='widescreen', w=1500, h=1000, scale=0.8)
 
 ###############################################################################
 # Automated EDA using Pandas Profiling after cleaning
@@ -641,6 +729,3 @@ profile = ProfileReport(df, title='Loan Status_EDA')
 profile.to_file(output_file='Loan_Status_EDA.html')
 
 ###############################################################################
-
-
-
